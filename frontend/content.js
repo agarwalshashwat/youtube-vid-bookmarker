@@ -24,6 +24,7 @@ function initializeMessageListener() {
       if (video) {
         video.currentTime = request.timestamp;
       }
+      sendResponse({});
       return true;
     }
   });
@@ -35,4 +36,3 @@ if (document.readyState === "loading") {
 } else {
   initializeMessageListener();
 }
-  
