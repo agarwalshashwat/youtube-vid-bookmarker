@@ -3,7 +3,7 @@
     "name": "YouTube Video Bookmarker",
     "version": "1.0",
     "description": "Bookmark specific parts of YouTube videos with timestamps and descriptions.",
-    "permissions": ["storage", "tabs", "activeTab"],
+    "permissions": ["storage", "tabs", "activeTab", "scripting"],
     "host_permissions": ["*://www.youtube.com/*"],
     "action": {
       "default_popup": "popup.html",
@@ -17,7 +17,8 @@
       {
         "matches": ["*://*.youtube.com/*"],
         "js": ["content.js"],
-        "run_at": "document_end"
+        "run_at": "document_end",
+        "css": []
       }
     ],
     "commands": {

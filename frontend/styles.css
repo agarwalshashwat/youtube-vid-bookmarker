@@ -223,3 +223,41 @@ h1 {
     transform: translateY(0);
   }
 }
+
+/* Styles for YouTube progress bar markers */
+.yt-bookmark-marker {
+  position: absolute;
+  width: 4px;
+  height: 100%;
+  background-color: #ffeb3b;
+  z-index: 2;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.yt-bookmark-marker:hover {
+  transform: scaleX(2);
+  background-color: #ffd700;
+}
+
+.yt-bookmark-marker::after {
+  content: attr(data-description);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  visibility: hidden;
+  opacity: 0;
+  transition: visibility 0s, opacity 0.2s;
+}
+
+.yt-bookmark-marker:hover::after {
+  visibility: visible;
+  opacity: 1;
+}
