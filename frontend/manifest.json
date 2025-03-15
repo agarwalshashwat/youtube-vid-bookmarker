@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "YouTube Video Bookmarker",
     "version": "1.0",
-    "description": "Bookmark specific parts of YouTube videos.",
+    "description": "Bookmark specific parts of YouTube videos with timestamps and descriptions.",
     "permissions": ["storage", "tabs", "activeTab"],
     "host_permissions": ["*://www.youtube.com/*"],
     "action": {
@@ -19,6 +19,18 @@
         "js": ["content.js"],
         "run_at": "document_end"
       }
-    ]
-  }
-  
+    ],
+    "commands": {
+      "_execute_action": {
+        "suggested_key": {
+          "default": "Alt+B"
+        },
+        "description": "Open bookmark popup"
+      }
+    },
+    "icons": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+}

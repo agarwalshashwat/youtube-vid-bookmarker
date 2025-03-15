@@ -1,6 +1,17 @@
 {
+  "name": "youtube-video-bookmark",
+  "version": "1.0.0",
+  "description": "A Chrome extension for managing YouTube video bookmarks",
+  "main": "backend/index.js",
+  "scripts": {
+    "start": "node backend/index.js",
+    "dev": "nodemon backend/index.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
   }
 }

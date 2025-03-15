@@ -8,93 +8,7 @@ async function getCurrentTab() {
   return tab;
 }
 
-document.getElementById("add-bookmark").addEventListener("click", async () => {
-  const tab = await getCurrentTab();
-  
-  if (!tab.url.includes("youtube.com/watch")) {
-    alert("Please navigate to a YouTube video first!");
-    return;
-  }
-
-  const videoId = extractVideoId(tab.url);
-  
-  if (!videoId) {
-    alert("Could not find a valid YouTube video ID");
-    return;
-  }
-
-  try {
-    const response = await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(
-        tab.id, 
-        { action: "getTimestamp" },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError);
-          } else {
-            resolve(response);
-          }
-        }
-      );
-    });
-
-    if (response && response.timestamp != null) {
-      const description = document.getElementById("description").value;
-      const bookmark = { videoId, timestamp: response.timestamp, description };
-  
-      saveBookmark(bookmark);
-  
-      loadBookmarks(videoId);
-    } else {
-      throw new Error("Invalid response from content script");
-    }
-  } catch (error) {
-    console.error("Error:", error);
-    alert("Please refresh the YouTube page and try again.");
-  }
-});
-
-document.addEventListener("DOMContentLoaded", async () => {
-  const tab = await getCurrentTab();
-  
-  if (tab.url.includes("youtube.com/watch")) {
-    const videoId = extractVideoId(tab.url);
-    if (videoId) {
-      loadBookmarks(videoId);
-    }
-  }
-});
-  
-// Load and display bookmarks with clickable links to jump to timestamps and delete buttons
-async function loadBookmarks(videoId) {
-  chrome.storage.local.get({ bookmarks: [] }, (result) => {
-    const bookmarks = result.bookmarks;
-    const bookmarkList = document.getElementById("bookmark-list");
-
-    bookmarkList.innerHTML = bookmarks.map(b => `
-      <div class="bookmark" data-timestamp="${b.timestamp}" data-id="${b.id}">
-        <span>${formatTimestamp(b.timestamp)} - ${b.description || "No description"}</span>
-        <button class="delete-bookmark">Delete</button>
-      </div>
-    `).join("");
-
-    // Add click event to each bookmark to jump to the specified timestamp
-    document.querySelectorAll(".bookmark").forEach(bookmarkEl => {
-      bookmarkEl.addEventListener("click", async (event) => {
-        if (event.target.classList.contains("delete-bookmark")) {
-          const bookmarkId = bookmarkEl.getAttribute("data-id");
-          deleteBookmark(bookmarkId);
-          bookmarkEl.remove();
-        } else {
-          const timestamp = bookmarkEl.getAttribute("data-timestamp");
-          chrome.tabs.sendMessage(tab.id, { action: "setTimestamp", timestamp: parseFloat(timestamp) });
-        }
-      });
-    });
-  });
-}
-
-// Helper function to format timestamp (e.g., 123 -> "02:03")
+// Helper function to format timestamp
 function formatTimestamp(seconds) {
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
@@ -105,64 +19,163 @@ function formatTimestamp(seconds) {
 function saveBookmark(bookmark) {
   chrome.storage.local.get({ bookmarks: [] }, (result) => {
     const bookmarks = result.bookmarks;
-    bookmarks.push(bookmark);
-    chrome.storage.local.set({ bookmarks: bookmarks }, () => {
-      console.log("Bookmark saved:", bookmark);
+    const newBookmark = {
+      ...bookmark,
+      id: Date.now(),
+      createdAt: new Date().toISOString()
+    };
+    bookmarks.push(newBookmark);
+    chrome.storage.local.set({ bookmarks }, () => {
+      console.log("Bookmark saved:", newBookmark);
+      loadBookmarks();
     });
   });
+}
+
+// Function to show error message with auto-cleanup
+function showError(message, duration = 3000) {
+  const errorElement = document.getElementById("error-message");
+  errorElement.textContent = message;
+  errorElement.classList.add("show");
+  errorElement.classList.remove("hide");
+
+  setTimeout(() => {
+    errorElement.classList.add("hide");
+    errorElement.classList.remove("show");
+    setTimeout(() => {
+      errorElement.style.display = "none";
+    }, 300); // Match the CSS transition duration
+  }, duration);
 }
 
 // Function to delete a bookmark
-function deleteBookmark(bookmarkId) {
-  chrome.storage.local.get({ bookmarks: [] }, (result) => {
-    const bookmarks = result.bookmarks.filter(b => b.id !== parseInt(bookmarkId));
-    chrome.storage.local.set({ bookmarks: bookmarks }, () => {
-      console.log("Bookmark deleted:", bookmarkId);
-    });
-  });
-}
-
-// Function to load bookmarks
-function loadBookmarks() {
-  chrome.storage.local.get({ bookmarks: [] }, (result) => {
-    const bookmarks = result.bookmarks;
-    // Render bookmarks in the UI
-    renderBookmarks(bookmarks);
-  });
-}
-
-// Function to render bookmarks in the UI
-function renderBookmarks(bookmarks) {
-  const bookmarkList = document.getElementById("bookmark-list");
-  bookmarkList.innerHTML = ""; // Clear existing bookmarks
-
-  bookmarks.forEach((bookmark) => {
-    const bookmarkEl = document.createElement("div");
-    bookmarkEl.className = "bookmark";
-    bookmarkEl.setAttribute("data-timestamp", bookmark.timestamp);
-    bookmarkEl.setAttribute("data-id", bookmark.id);
-    bookmarkEl.innerHTML = `
-      <span>${formatTimestamp(bookmark.timestamp)} - ${bookmark.description || "No description"}</span>
-      <button class="delete-bookmark">Delete</button>
-    `;
-
-    // Add click event handlers
-    const deleteBtn = bookmarkEl.querySelector('.delete-bookmark');
-    deleteBtn.addEventListener("click", (e) => {
-      e.stopPropagation(); // Prevent bookmark click event
-      const bookmarkId = bookmark.id;
-      deleteBookmark(bookmarkId);
-      bookmarkEl.remove();
-    });
-
-    // Add timestamp click event
-    bookmarkEl.addEventListener("click", () => {
-      const timestamp = bookmark.timestamp;
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "setTimestamp", timestamp: parseFloat(timestamp) });
+async function deleteBookmark(bookmarkId) {
+  try {
+    chrome.storage.local.get({ bookmarks: [] }, (result) => {
+      const bookmarks = result.bookmarks.filter(b => b.id !== parseInt(bookmarkId));
+      chrome.storage.local.set({ bookmarks }, () => {
+        console.log("Bookmark deleted:", bookmarkId);
+        loadBookmarks(); // Refresh the list after deletion
       });
     });
-
-    bookmarkList.appendChild(bookmarkEl);
-  });
+  } catch (error) {
+    console.error("Error deleting bookmark:", error);
+    showError("Failed to delete bookmark");
+  }
 }
+
+// Load and display bookmarks
+async function loadBookmarks() {
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes("youtube.com/watch")) {
+      return;
+    }
+
+    const videoId = extractVideoId(tab.url);
+    if (!videoId) {
+      return;
+    }
+
+    chrome.storage.local.get({ bookmarks: [] }, (result) => {
+      const bookmarks = result.bookmarks
+        .filter(b => b.videoId === videoId)
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      const bookmarkList = document.getElementById("bookmark-list");
+      const loadingSpinner = bookmarkList.querySelector(".loading-spinner");
+      
+      if (loadingSpinner) {
+        loadingSpinner.style.display = "none";
+      }
+
+      if (bookmarks.length === 0) {
+        bookmarkList.innerHTML = '<div class="no-bookmarks">No bookmarks yet</div>';
+        return;
+      }
+
+      bookmarkList.innerHTML = bookmarks.map(b => `
+        <div class="bookmark" 
+             data-timestamp="${b.timestamp}" 
+             data-id="${b.id}"
+             title="${b.description || 'No description'}">
+          <span>${formatTimestamp(b.timestamp)} - ${b.description || "No description"}</span>
+          <button class="delete-bookmark" aria-label="Delete bookmark">Delete</button>
+        </div>
+      `).join("");
+
+      // Add event listeners for bookmarks
+      document.querySelectorAll(".bookmark").forEach(bookmarkEl => {
+        const deleteBtn = bookmarkEl.querySelector(".delete-bookmark");
+        const bookmarkId = bookmarkEl.getAttribute("data-id");
+        const timestamp = bookmarkEl.getAttribute("data-timestamp");
+
+        // Delete button click
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteBookmark(bookmarkId);
+        });
+
+        // Timestamp navigation click
+        bookmarkEl.addEventListener("click", (e) => {
+          if (!e.target.classList.contains("delete-bookmark")) {
+            chrome.tabs.sendMessage(tab.id, { 
+              action: "setTimestamp", 
+              timestamp: parseFloat(timestamp) 
+            });
+          }
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Error loading bookmarks:", error);
+    showError("Failed to load bookmarks");
+  }
+}
+
+// Initialize popup
+document.addEventListener("DOMContentLoaded", () => {
+  loadBookmarks();
+  
+  // Add bookmark button click handler
+  document.getElementById("add-bookmark").addEventListener("click", async () => {
+    try {
+      const tab = await getCurrentTab();
+      
+      if (!tab.url.includes("youtube.com/watch")) {
+        throw new Error("Please navigate to a YouTube video first!");
+      }
+
+      const videoId = extractVideoId(tab.url);
+      if (!videoId) {
+        throw new Error("Could not find a valid YouTube video ID");
+      }
+
+      const response = await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(
+          tab.id, 
+          { action: "getTimestamp" },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              reject(chrome.runtime.lastError);
+            } else {
+              resolve(response);
+            }
+          }
+        );
+      });
+
+      if (response && response.timestamp != null) {
+        const description = document.getElementById("description").value;
+        const bookmark = { videoId, timestamp: response.timestamp, description };
+        saveBookmark(bookmark);
+        document.getElementById("description").value = ""; // Clear input after saving
+      } else {
+        throw new Error("Could not get current video timestamp");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      showError(error.message);
+    }
+  });
+});
