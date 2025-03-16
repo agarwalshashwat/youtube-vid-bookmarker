@@ -12,6 +12,11 @@ let video = null;
 let progressBar = null;
 const KEYBOARD_SHORTCUT = 'Alt+B';
 
+let isInitialized = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_DELAY = 1000;
+
 // Notify that content script is ready
 chrome.runtime.sendMessage({ action: "contentScriptReady" }, response => {
   debugLog('Init', 'Sent contentScriptReady message', response);
@@ -146,52 +151,62 @@ function initializeMessageListener() {
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     debugLog('Messaging', 'Received message', { action: request.action, sender });
 
-    if (request.action === "ping") {
-      debugLog('Messaging', 'Received ping request');
-      sendResponse({ status: "ready" });
-      return true;
-    }
+    const handleMessage = async () => {
+      try {
+        if (request.action === "ping") {
+          sendResponse({ status: "ready" });
+          return;
+        }
 
-    if (request.action === "getTimestamp") {
-      if (!video) {
-        video = document.querySelector('video');
-      }
-      
-      if (!video) {
-        debugLog('Video', 'Video element not found for getTimestamp');
-        sendResponse({ timestamp: null, error: "Video element not found" });
-        return true;
-      }
+        if (request.action === "getTimestamp") {
+          if (!video) {
+            video = document.querySelector('video');
+          }
+          
+          if (!video) {
+            throw new Error("Video element not found");
+          }
 
-      debugLog('Video', 'Getting current timestamp', { time: video.currentTime });
-      sendResponse({ timestamp: video.currentTime });
-      return true;
-    }
+          sendResponse({ timestamp: video.currentTime });
+          return;
+        }
 
-    if (request.action === "setTimestamp") {
-      if (!video) {
-        video = document.querySelector('video');
-      }
-      
-      if (video) {
-        debugLog('Video', 'Setting timestamp', { timestamp: request.timestamp });
-        video.currentTime = request.timestamp;
-        video.play().catch(err => {
-          debugLog('Video', 'Autoplay prevented', { error: err });
-        });
-      } else {
-        debugLog('Video', 'Video element not found for setTimestamp');
-      }
-      sendResponse({});
-      return true;
-    }
+        if (request.action === "setTimestamp") {
+          if (!video) {
+            video = document.querySelector('video');
+          }
+          
+          if (video) {
+            debugLog('Video', 'Setting timestamp', { timestamp: request.timestamp });
+            video.currentTime = request.timestamp;
+            video.play().catch(err => {
+              debugLog('Video', 'Autoplay prevented', { error: err });
+            });
+          } else {
+            debugLog('Video', 'Video element not found for setTimestamp');
+          }
+          sendResponse({});
+          return;
+        }
 
-    if (request.action === "bookmarkUpdated") {
-      debugLog('Markers', 'Received bookmark update notification');
-      updateBookmarkMarkers();
-      sendResponse({});
-      return true;
-    }
+        if (request.action === "bookmarkUpdated") {
+          debugLog('Markers', 'Received bookmark update notification');
+          updateBookmarkMarkers();
+          sendResponse({});
+          return;
+        }
+      } catch (error) {
+        debugLog('Messaging', 'Error handling message', { error });
+        sendResponse({ error: error.message });
+      }
+    };
+
+    handleMessage().catch(error => {
+      debugLog('Messaging', 'Unhandled error in message listener', { error });
+      sendResponse({ error: error.message });
+    });
+
+    return true; // Keep the message channel open for async response
   });
 }
 
@@ -283,14 +298,109 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
+// Add this function after debug logging setup
+async function getVideoTitle() {
+  const titleElement = document.querySelector('h1.ytd-video-primary-info-renderer');
+  if (titleElement) {
+    return titleElement.textContent.trim();
+  }
+  return null;
+}
+
+// Add this function to save video title
+async function saveVideoTitle() {
+  const videoId = new URLSearchParams(window.location.search).get('v');
+  if (!videoId) return;
+
+  const title = await getVideoTitle();
+  if (title) {
+    debugLog('Video', 'Saving video title', { videoId, title });
+    const result = await chrome.storage.local.get({ videoTitles: {} });
+    const videoTitles = result.videoTitles;
+    videoTitles[videoId] = title;
+    await chrome.storage.local.set({ videoTitles });
+  }
+}
+
+// Add this function to handle reconnection
+async function attemptReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    debugLog('Reconnect', 'Max reconnection attempts reached');
+    return false;
+  }
+
+  debugLog('Reconnect', `Attempting to reconnect (${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+  reconnectAttempts++;
+
+  try {
+    await chrome.runtime.sendMessage({ action: "ping" });
+    debugLog('Reconnect', 'Reconnection successful');
+    reconnectAttempts = 0;
+    return true;
+  } catch (error) {
+    debugLog('Reconnect', 'Reconnection failed', { error });
+    await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY));
+    return false;
+  }
+}
+
+// Update the messaging function to handle disconnection
+async function sendMessageWithRetry(message) {
+  try {
+    return await chrome.runtime.sendMessage(message);
+  } catch (error) {
+    if (error.message.includes('Extension context invalidated')) {
+      debugLog('Error', 'Extension context invalidated, attempting to reconnect');
+      const reconnected = await attemptReconnect();
+      if (reconnected) {
+        return await chrome.runtime.sendMessage(message);
+      }
+      throw new Error('Failed to reconnect to extension');
+    }
+    throw error;
+  }
+}
+
 // Initialize when the page loads
 function initialize() {
+  if (isInitialized) {
+    debugLog('Init', 'Already initialized, skipping');
+    return;
+  }
+
   debugLog('Init', 'Initializing content script');
-  injectStyles();  // Add this line to inject styles
-  initializeVideoObserver();
-  initializeMessageListener();
-  document.addEventListener('keydown', handleKeyboardShortcut);
-  debugLog('Init', 'Content script initialized');
+  
+  try {
+    injectStyles();
+    initializeVideoObserver();
+    initializeMessageListener();
+    document.addEventListener('keydown', handleKeyboardShortcut);
+    
+    // Add MutationObserver for title changes
+    const titleObserver = new MutationObserver(async () => {
+      try {
+        await saveVideoTitle();
+      } catch (error) {
+        debugLog('Title', 'Error saving video title', { error });
+      }
+    });
+
+    titleObserver.observe(document.body, {
+      subtree: true,
+      childList: true
+    });
+
+    // Initial title save
+    saveVideoTitle().catch(error => {
+      debugLog('Title', 'Error saving initial video title', { error });
+    });
+    
+    isInitialized = true;
+    debugLog('Init', 'Content script initialized successfully');
+  } catch (error) {
+    debugLog('Init', 'Error during initialization', { error });
+    throw error;
+  }
 }
 
 if (document.readyState === "loading") {
@@ -308,4 +418,6 @@ window.addEventListener('unload', () => {
   if (video) {
     video.removeEventListener('durationchange', updateBookmarkMarkers);
   }
+  isInitialized = false;
+  reconnectAttempts = 0;
 });

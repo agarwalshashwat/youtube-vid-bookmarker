@@ -5,6 +5,10 @@
     "description": "Bookmark specific parts of YouTube videos with timestamps and descriptions.",
     "permissions": ["storage", "tabs", "activeTab", "scripting"],
     "host_permissions": ["*://www.youtube.com/*"],
+    "web_accessible_resources": [{
+      "resources": ["bookmarks.html", "bookmarks.js", "bookmarks.css"],
+      "matches": ["<all_urls>"]
+    }],
     "action": {
       "default_popup": "popup.html",
       "default_icon": {
