@@ -118,16 +118,21 @@ async function saveBookmark(bookmark) {
     const tab = await getCurrentTab();
     await waitForContentScript(tab.id);
     
-    const result = await storageGet({ bookmarks: [] });
+    // Get the video title
+    const result = await storageGet({ bookmarks: [], videoTitles: {} });
     const bookmarks = result.bookmarks;
+    const videoTitles = result.videoTitles;
+    
     const newBookmark = {
       ...bookmark,
       id: Date.now(),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      videoTitle: videoTitles[bookmark.videoId] || null
     };
-    bookmarks.push(newBookmark);
     
+    bookmarks.push(newBookmark);
     await storageSet({ bookmarks });
+    
     debugLog('Bookmarks', 'Bookmark saved successfully', newBookmark);
     await loadBookmarks();
     
@@ -308,5 +313,13 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("Error:", error);
       showError(error.message);
     }
+  });
+
+  // Add handler for View All Bookmarks link
+  document.getElementById('view-all-bookmarks').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({
+      url: chrome.runtime.getURL('bookmarks.html')
+    });
   });
 });

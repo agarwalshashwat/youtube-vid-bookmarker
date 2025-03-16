@@ -261,3 +261,29 @@ h1 {
   visibility: visible;
   opacity: 1;
 }
+
+/* Styles for navigation links */
+.nav-links {
+  margin-bottom: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.nav-links a {
+  color: #4da1ee;
+  text-decoration: none;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.2s ease;
+}
+
+.nav-links a:hover {
+  color: #75b0e7;
+  text-decoration: underline;
+}
+
+.nav-links a::before {
+  content: '📚';
+  margin-right: 6px;
+}
