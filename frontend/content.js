@@ -411,8 +411,8 @@ if (document.readyState === "loading") {
   initialize();
 }
 
-// Cleanup on unload
-window.addEventListener('unload', () => {
+// Cleanup on pagehide
+window.addEventListener('pagehide', () => {
   debugLog('Cleanup', 'Performing cleanup');
   document.removeEventListener('keydown', handleKeyboardShortcut);
   if (video) {
