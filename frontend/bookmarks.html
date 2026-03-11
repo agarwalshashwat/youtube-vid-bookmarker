@@ -3,18 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All Bookmarks - YouTube Video Bookmarker</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Bookmarks — YouTube Bookmarker</title>
     <link rel="stylesheet" href="bookmarks.css">
 </head>
 <body class="bookmarks-page">
-    <div class="container">
-        <h1>All Video Bookmarks</h1>
-        <div id="bookmarks-container">
-            <div class="loading-spinner">Loading bookmarks...</div>
+
+    <div class="page-header">
+        <div class="page-logo">
+            <span class="popup-logo-icon">▶</span>
+            <span class="page-title">YouTube Bookmarker</span>
         </div>
     </div>
-    <div id="error-toast" class="error-toast"></div>
+
+    <div class="container">
+
+        <div class="toolbar">
+            <input type="text" id="search-input" placeholder="Search notes, titles, or timestamps..." class="toolbar-search">
+            <select id="sort-select" class="toolbar-sort">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="timestamp">By timestamp</option>
+            </select>
+            <div class="toolbar-actions">
+                <button id="export-json" class="toolbar-btn">↓ JSON</button>
+                <button id="export-csv"  class="toolbar-btn">↓ CSV</button>
+                <button id="export-md"   class="toolbar-btn">↓ MD</button>
+                <button id="import-btn"  class="toolbar-btn toolbar-btn--import">↑ Import</button>
+                <input type="file" id="import-input" accept=".json" style="display:none">
+            </div>
+        </div>
+
+        <div id="bookmarks-container">
+            <div class="loading-spinner">Loading bookmarks…</div>
+        </div>
+
+    </div>
+
+    <div id="error-toast"   class="error-toast"></div>
     <div id="success-toast" class="success-toast"></div>
     <script src="bookmarks.js"></script>
 </body>

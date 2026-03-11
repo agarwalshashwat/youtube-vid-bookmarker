@@ -4,7 +4,11 @@
     "version": "1.0",
     "description": "Bookmark specific parts of YouTube videos with timestamps and descriptions.",
     "permissions": ["storage", "tabs", "activeTab", "scripting"],
-    "host_permissions": ["*://www.youtube.com/*"],
+    "host_permissions": [
+        "*://www.youtube.com/*",
+        "http://localhost:3000/*",
+        "https://bookmarker.app/*"
+    ],
     "web_accessible_resources": [{
       "resources": ["bookmarks.html", "bookmarks.js", "bookmarks.css"],
       "matches": ["<all_urls>"]
@@ -16,6 +20,9 @@
         "48": "icon.png",
         "128": "icon.png"
       }
+    },
+    "background": {
+      "service_worker": "background.js"
     },
     "content_scripts": [
       {
@@ -31,6 +38,19 @@
           "default": "Alt+B"
         },
         "description": "Open bookmark popup"
+      },
+      "quick_save": {
+        "suggested_key": {
+          "default": "Ctrl+Shift+S",
+          "mac": "Command+Shift+S"
+        },
+        "description": "Quick save bookmark"
+      },
+      "silent_save": {
+        "suggested_key": {
+          "default": "Alt+S"
+        },
+        "description": "Silent save bookmark"
       }
     },
     "icons": {

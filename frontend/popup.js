@@ -1,6 +1,39 @@
+// ─── API config ──────────────────────────────────────────────────────────────
+// Change to 'https://bookmarker.app' after deploying the webapp
+const API_BASE = 'http://localhost:3000';
+
+// ─── Tag colours ────────────────────────────────────────────────────────────
+const TAG_COLORS = {
+  important: '#ff6b6b',
+  review:    '#ffa94d',
+  note:      '#74c0fc',
+  question:  '#a9e34b',
+  todo:      '#da77f2',
+  key:       '#f783ac',
+};
+
+function parseTags(description) {
+  if (!description) return [];
+  const matches = description.match(/#(\w+)/g);
+  return matches ? matches.map(t => t.slice(1).toLowerCase()) : [];
+}
+
+function stringToColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return `hsl(${Math.abs(hash) % 360}, 60%, 60%)`;
+}
+
+function getTagColor(tags) {
+  if (!tags || tags.length === 0) return '#4da1ee';
+  return TAG_COLORS[tags[0]] || stringToColor(tags[0]);
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
 function extractVideoId(url) {
-  const urlParams = new URLSearchParams(new URL(url).search);
-  return urlParams.get('v');
+  return new URLSearchParams(new URL(url).search).get('v');
 }
 
 async function getCurrentTab() {
@@ -8,318 +41,477 @@ async function getCurrentTab() {
   return tab;
 }
 
-// Helper function to format timestamp
 function formatTimestamp(seconds) {
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-// Debug logging function
 function debugLog(category, message, data = null) {
-  const timestamp = new Date().toISOString();
-  const logMessage = `[Popup][${category}][${timestamp}] ${message}`;
-  console.log(logMessage, data ? data : '');
+  console.log(`[Popup][${category}][${new Date().toISOString()}] ${message}`, data ?? '');
 }
 
-// Helper function to wrap Chrome messaging with proper error handling
+// ─── Messaging ───────────────────────────────────────────────────────────────
 function sendMessageToTab(tabId, message) {
-  debugLog('Messaging', 'Sending message to tab', { tabId, message });
-  return new Promise(async (resolve, reject) => {
-    try {
-      chrome.tabs.sendMessage(tabId, message, (response) => {
-        if (chrome.runtime.lastError) {
-          const error = chrome.runtime.lastError.message || "Failed to communicate with the page";
-          debugLog('Messaging', 'Message send failed', { error });
-          reject(new Error(error));
-        } else if (response && response.error) {
-          debugLog('Messaging', 'Received error response', response);
-          reject(new Error(response.error));
-        } else {
-          debugLog('Messaging', 'Message sent successfully', { response });
-          resolve(response);
-        }
-      });
-    } catch (error) {
-      debugLog('Messaging', 'Exception during message send', { error: error.message });
-      reject(error);
-    }
-  });
-}
-
-// Helper function to wrap Chrome storage operations
-function storageGet(key) {
-  debugLog('Storage', 'Reading from storage', { key });
   return new Promise((resolve, reject) => {
-    try {
-      chrome.storage.local.get(key, (result) => {
-        if (chrome.runtime.lastError) {
-          debugLog('Storage', 'Storage read failed', { error: chrome.runtime.lastError });
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          debugLog('Storage', 'Storage read successful', { result });
-          resolve(result);
-        }
-      });
-    } catch (error) {
-      debugLog('Storage', 'Exception during storage read', { error: error.message });
-      reject(error);
-    }
+    chrome.tabs.sendMessage(tabId, message, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message || 'Failed to communicate with the page'));
+      } else if (response && response.error) {
+        reject(new Error(response.error));
+      } else {
+        resolve(response);
+      }
+    });
   });
 }
 
-function storageSet(data) {
-  debugLog('Storage', 'Writing to storage', { data });
-  return new Promise((resolve, reject) => {
-    try {
-      chrome.storage.local.set(data, () => {
-        if (chrome.runtime.lastError) {
-          debugLog('Storage', 'Storage write failed', { error: chrome.runtime.lastError });
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          debugLog('Storage', 'Storage write successful');
-          resolve();
-        }
-      });
-    } catch (error) {
-      debugLog('Storage', 'Exception during storage write', { error: error.message });
-      reject(error);
-    }
-  });
-}
-
-// Helper function to check if content script is ready with retries
 async function waitForContentScript(tabId, maxRetries = 3, delay = 1000) {
-  debugLog('Connection', 'Checking content script status', { tabId, maxRetries, delay });
   for (let i = 0; i < maxRetries; i++) {
     try {
-      debugLog('Connection', `Attempt ${i + 1} to connect to content script`);
-      const response = await sendMessageToTab(tabId, { action: "ping" });
-      if (response && response.status === "ready") {
-        debugLog('Connection', 'Content script is ready');
-        return true;
-      }
-      debugLog('Connection', 'Invalid response from content script', response);
-    } catch (error) {
-      debugLog('Connection', `Attempt ${i + 1} failed`, { error: error.message });
-      if (i < maxRetries - 1) {
-        debugLog('Connection', `Waiting ${delay}ms before retry`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
+      const r = await sendMessageToTab(tabId, { action: 'ping' });
+      if (r && r.status === 'ready') return true;
+    } catch {
+      if (i < maxRetries - 1) await new Promise(r => setTimeout(r, delay));
     }
   }
-  throw new Error("Content script not available. Please refresh the YouTube page.");
+  throw new Error('Content script not available. Please refresh the YouTube page.');
 }
 
-// Function to save a bookmark
+// ─── Storage (per-video sync keys) ───────────────────────────────────────────
+function bmKey(videoId) { return `bm_${videoId}`; }
+
+function syncGet(defaults) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.get(defaults, r => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else resolve(r);
+    });
+  });
+}
+
+function syncSet(data) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.set(data, () => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else resolve();
+    });
+  });
+}
+
+async function getVideoBookmarks(videoId) {
+  const r = await syncGet({ [bmKey(videoId)]: [] });
+  return r[bmKey(videoId)];
+}
+
+async function saveVideoBookmarks(videoId, bookmarks) {
+  await syncSet({ [bmKey(videoId)]: bookmarks });
+}
+
+async function getVideoTitles() {
+  const r = await syncGet({ videoTitles: {} });
+  return r.videoTitles;
+}
+
+// ─── One-time migration from chrome.storage.local → sync ─────────────────────
+async function migrateToSync(tabId) {
+  const check = await syncGet({ syncMigrated: false });
+  if (check.syncMigrated) return;
+
+  const local = await new Promise(resolve =>
+    chrome.storage.local.get({ bookmarks: [], videoTitles: {} }, resolve)
+  );
+
+  const syncData = { syncMigrated: true };
+
+  if (local.bookmarks.length > 0) {
+    const byVideo = {};
+    local.bookmarks.forEach(b => {
+      if (!byVideo[b.videoId]) byVideo[b.videoId] = [];
+      const tags = b.tags || parseTags(b.description);
+      byVideo[b.videoId].push({ ...b, tags, color: b.color || getTagColor(tags) });
+    });
+    for (const [vId, bms] of Object.entries(byVideo)) {
+      syncData[bmKey(vId)] = bms;
+    }
+  }
+
+  if (Object.keys(local.videoTitles).length > 0) {
+    syncData.videoTitles = local.videoTitles;
+  }
+
+  await syncSet(syncData);
+  debugLog('Migration', 'Migrated bookmarks from local to sync');
+
+  // Refresh markers after migration
+  if (tabId) {
+    try { await sendMessageToTab(tabId, { action: 'bookmarkUpdated' }); } catch {}
+  }
+}
+
+// ─── Bookmark CRUD ────────────────────────────────────────────────────────────
 async function saveBookmark(bookmark) {
   try {
-    debugLog('Bookmarks', 'Saving new bookmark', bookmark);
     const tab = await getCurrentTab();
     await waitForContentScript(tab.id);
-    
-    // Get the video title
-    const result = await storageGet({ bookmarks: [], videoTitles: {} });
-    const bookmarks = result.bookmarks;
-    const videoTitles = result.videoTitles;
-    
-    const newBookmark = {
+
+    // Duplicate check (unique by videoId + timestamp)
+    const existing = await getVideoBookmarks(bookmark.videoId);
+    if (existing.some(b => Math.floor(b.timestamp) === Math.floor(bookmark.timestamp))) {
+      showError('Bookmark already exists.');
+      return;
+    }
+
+    const videoTitles = await getVideoTitles();
+    const tags  = parseTags(bookmark.description);
+    const color = getTagColor(tags);
+    const description = bookmark.description.trim() || `Bookmark at ${formatTimestamp(bookmark.timestamp)}`;
+
+    const bookmarks = await getVideoBookmarks(bookmark.videoId);
+    bookmarks.push({
       ...bookmark,
+      description,
+      tags,
+      color,
       id: Date.now(),
       createdAt: new Date().toISOString(),
-      videoTitle: videoTitles[bookmark.videoId] || null
-    };
-    
-    bookmarks.push(newBookmark);
-    await storageSet({ bookmarks });
-    
-    debugLog('Bookmarks', 'Bookmark saved successfully', newBookmark);
+      videoTitle: videoTitles[bookmark.videoId] || null,
+    });
+
+    await saveVideoBookmarks(bookmark.videoId, bookmarks);
+    debugLog('Bookmarks', 'Saved bookmark', { description, tags });
+
+    document.getElementById('description').value = '';
+    showStatus('Bookmark saved ✓');
+
     await loadBookmarks();
-    
-    // Notify content script to update markers
-    await sendMessageToTab(tab.id, { action: "bookmarkUpdated" });
+    await sendMessageToTab(tab.id, { action: 'bookmarkUpdated' });
   } catch (error) {
-    debugLog('Bookmarks', 'Failed to save bookmark', { error: error.message });
-    showError("Failed to save bookmark: " + error.message);
+    debugLog('Error', 'Failed to save bookmark', { error: error.message });
+    showError('Failed to save bookmark: ' + error.message);
   }
 }
 
-// Function to show error message with auto-cleanup
-function showError(message, duration = 3000) {
-  const errorElement = document.getElementById("error-message");
-  errorElement.textContent = message;
-  errorElement.classList.add("show");
-  errorElement.classList.remove("hide");
-
-  setTimeout(() => {
-    errorElement.classList.add("hide");
-    errorElement.classList.remove("show");
-    setTimeout(() => {
-      errorElement.style.display = "none";
-    }, 300); // Match the CSS transition duration
-  }, duration);
-}
-
-// Function to delete a bookmark
-async function deleteBookmark(bookmarkId) {
+async function deleteBookmark(videoId, bookmarkId) {
   try {
-    debugLog('Bookmarks', 'Deleting bookmark', { bookmarkId });
     const tab = await getCurrentTab();
     await waitForContentScript(tab.id);
-    
-    const result = await storageGet({ bookmarks: [] });
-    const bookmarks = result.bookmarks.filter(b => b.id !== parseInt(bookmarkId));
-    
-    await storageSet({ bookmarks });
-    debugLog('Bookmarks', 'Bookmark deleted successfully');
-    
+
+    const bookmarks = await getVideoBookmarks(videoId);
+    await saveVideoBookmarks(videoId, bookmarks.filter(b => b.id !== parseInt(bookmarkId)));
+
     await loadBookmarks();
-    await sendMessageToTab(tab.id, { action: "bookmarkUpdated" });
+    await sendMessageToTab(tab.id, { action: 'bookmarkUpdated' });
   } catch (error) {
-    debugLog('Bookmarks', 'Failed to delete bookmark', { error: error.message });
-    showError("Failed to delete bookmark: " + error.message);
+    showError('Failed to delete bookmark: ' + error.message);
   }
 }
 
-// Load and display bookmarks
-async function loadBookmarks() {
+async function updateBookmarkDescription(videoId, bookmarkId, newDescription) {
   try {
-    debugLog('Bookmarks', 'Loading bookmarks');
     const tab = await getCurrentTab();
-    if (!tab.url.includes("youtube.com/watch")) {
-      debugLog('Bookmarks', 'Not on a YouTube video page');
-      return;
+    const bookmarks = await getVideoBookmarks(videoId);
+    const updated = bookmarks.map(b => {
+      if (b.id !== parseInt(bookmarkId)) return b;
+      const tags  = parseTags(newDescription);
+      const color = getTagColor(tags);
+      return { ...b, description: newDescription, tags, color };
+    });
+    await saveVideoBookmarks(videoId, updated);
+    await loadBookmarks();
+    try { await sendMessageToTab(tab.id, { action: 'bookmarkUpdated' }); } catch {}
+  } catch (error) {
+    showError('Failed to update bookmark: ' + error.message);
+  }
+}
+
+// ─── Share ────────────────────────────────────────────────────────────────────
+async function shareBookmarks() {
+  const btn = document.getElementById('share-btn');
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) {
+      throw new Error('Please navigate to a YouTube video first!');
     }
 
     const videoId = extractVideoId(tab.url);
-    if (!videoId) {
-      debugLog('Bookmarks', 'No video ID found');
-      return;
-    }
+    if (!videoId) throw new Error('Could not find video ID');
 
-    debugLog('Bookmarks', 'Checking content script status');
-    await waitForContentScript(tab.id);
-
-    const result = await storageGet({ bookmarks: [] });
-    const bookmarks = result.bookmarks
-      .filter(b => b.videoId === videoId)
-      .sort((a, b) => a.timestamp - b.timestamp);
-
-    debugLog('Bookmarks', 'Found bookmarks for video', { 
-      count: bookmarks.length, 
-      videoId 
-    });
-
-    const bookmarkList = document.getElementById("bookmark-list");
-    const loadingSpinner = bookmarkList.querySelector(".loading-spinner");
-    
-    if (loadingSpinner) {
-      loadingSpinner.style.display = "none";
-    }
-
+    const bookmarks = await getVideoBookmarks(videoId);
     if (bookmarks.length === 0) {
-      debugLog('UI', 'No bookmarks to display');
-      bookmarkList.innerHTML = '<div class="no-bookmarks">No bookmarks yet</div>';
-      return;
+      throw new Error('Add some bookmarks before sharing');
     }
 
-    debugLog('UI', 'Rendering bookmarks');
-    bookmarkList.innerHTML = bookmarks.map(b => `
-      <div class="bookmark" 
-           data-timestamp="${b.timestamp}" 
-           data-id="${b.id}"
-           title="${b.description || 'No description'}">
-        <span>${formatTimestamp(b.timestamp)} - ${b.description || "No description"}</span>
-        <button class="delete-bookmark" aria-label="Delete bookmark">Delete</button>
-      </div>
-    `).join("");
+    const videoTitles = await getVideoTitles();
 
-    // Add event listeners for bookmarks
-    document.querySelectorAll(".bookmark").forEach(bookmarkEl => {
-      const deleteBtn = bookmarkEl.querySelector(".delete-bookmark");
-      const bookmarkId = bookmarkEl.getAttribute("data-id");
-      const timestamp = bookmarkEl.getAttribute("data-timestamp");
+    btn.textContent = 'Sharing…';
+    btn.disabled = true;
 
-      // Delete button click
-      deleteBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await deleteBookmark(bookmarkId);
-      });
-
-      // Timestamp navigation click
-      bookmarkEl.addEventListener("click", async (e) => {
-        if (!e.target.classList.contains("delete-bookmark")) {
-          const currentTab = await getCurrentTab();
-          await handleBookmarkClick(currentTab, timestamp);
-        }
-      });
+    const response = await fetch(`${API_BASE}/api/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        videoId,
+        videoTitle: videoTitles[videoId] || '',
+        bookmarks,
+      }),
     });
+
+    if (!response.ok) throw new Error('Server error — is the webapp running?');
+
+    const { shareId } = await response.json();
+    const shareUrl = `${API_BASE}/v/${shareId}`;
+
+    await navigator.clipboard.writeText(shareUrl);
+
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('share-btn--copied');
+    setTimeout(() => {
+      btn.textContent = '↗ Share';
+      btn.classList.remove('share-btn--copied');
+      btn.disabled = false;
+    }, 2500);
   } catch (error) {
-    debugLog('Bookmarks', 'Error loading bookmarks', { error: error.message });
-    console.error("Error loading bookmarks:", error);
-    showError("Failed to load bookmarks: " + error.message);
+    debugLog('Error', 'Share failed', { error: error.message });
+    showError(error.message);
+    btn.textContent = '↗ Share';
+    btn.disabled = false;
   }
 }
 
-// Update the bookmark click handler
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+function showError(message, duration = 3000) {
+  const el = document.getElementById('error-message');
+  el.textContent = message;
+  el.style.display = 'block';
+  el.classList.add('show');
+  el.classList.remove('hide');
+  setTimeout(() => {
+    el.classList.add('hide');
+    el.classList.remove('show');
+    setTimeout(() => { el.style.display = 'none'; }, 300);
+  }, duration);
+}
+
+function showStatus(message, duration = 1500) {
+  const el = document.getElementById('status-message');
+  el.textContent = message;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ─── Render bookmarks in popup ────────────────────────────────────────────────
+async function loadBookmarks() {
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) return;
+
+    const videoId = extractVideoId(tab.url);
+    if (!videoId) return;
+
+    // Update video title context
+    const videoTitles = await getVideoTitles();
+    const titleEl = document.querySelector('#video-title span');
+    if (titleEl && videoTitles[videoId]) {
+      titleEl.textContent = videoTitles[videoId];
+    }
+
+    // Update timestamp preview
+    try {
+      const response = await sendMessageToTab(tab.id, { action: 'getCurrentTime' });
+      if (response && response.currentTime !== undefined) {
+        const currentTimeEl = document.getElementById('current-time');
+        if (currentTimeEl) {
+          currentTimeEl.textContent = `⏱ ${formatTimestamp(response.currentTime)}`;
+        }
+      }
+    } catch (e) {
+      debugLog('Error', 'Could not get current time', e.message);
+    }
+
+    await waitForContentScript(tab.id);
+
+    const bookmarks = (await getVideoBookmarks(videoId))
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    const list = document.getElementById('bookmark-list');
+    
+    if (bookmarks.length === 0) {
+      list.innerHTML = `
+        <div class="no-bookmarks">
+          No bookmarks yet.<br>
+          <span class="no-bookmarks-hint">Save important moments from YouTube videos<br>so you can revisit them later.</span>
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = bookmarks.map(b => `
+      <div class="bookmark" data-timestamp="${b.timestamp}" data-id="${b.id}" data-video-id="${videoId}" style="border-left-color: ${b.color || '#4da1ee'}">
+        <div class="bookmark-content">
+          <span class="bookmark-time" style="color:${b.color || '#4da1ee'}">${formatTimestamp(b.timestamp)}</span>
+          <span class="bookmark-desc">${b.description || 'No description'}</span>
+          ${b.tags && b.tags.length
+            ? `<div class="bookmark-tags">${b.tags.map(t =>
+                `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+              ).join('')}</div>`
+            : ''}
+        </div>
+        <button class="delete-bookmark" aria-label="Delete bookmark">&times;</button>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('.bookmark').forEach(el => {
+      const id        = el.dataset.id;
+      const vId       = el.dataset.videoId;
+      const timestamp = el.dataset.timestamp;
+
+      // Delete
+      el.querySelector('.delete-bookmark').addEventListener('click', async e => {
+        e.stopPropagation();
+        await deleteBookmark(vId, id);
+      });
+
+      // Navigate on row click (not on desc or delete)
+      el.addEventListener('click', async e => {
+        if (e.target.classList.contains('delete-bookmark') ||
+            e.target.classList.contains('bookmark-desc')) return;
+        const currentTab = await getCurrentTab();
+        await handleBookmarkClick(currentTab, timestamp);
+      });
+
+      // Inline edit on description click
+      el.querySelector('.bookmark-desc').addEventListener('click', e => {
+        e.stopPropagation();
+        const descEl  = e.currentTarget;
+        const current = descEl.textContent;
+
+        const input = document.createElement('input');
+        input.type      = 'text';
+        input.className = 'bookmark-edit-input';
+        input.value     = (current === 'No description' || current.startsWith('Bookmark at')) ? '' : current;
+        descEl.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const save = () => {
+          const val = input.value.trim() || `Bookmark at ${formatTimestamp(parseFloat(timestamp))}`;
+          updateBookmarkDescription(vId, id, val);
+        };
+
+        const blurHandler = () => {
+          save();
+          input.removeEventListener('blur', blurHandler);
+        };
+
+        input.addEventListener('blur', blurHandler);
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter')  { e.preventDefault(); input.removeEventListener('blur', blurHandler); save(); }
+          if (e.key === 'Escape') { input.removeEventListener('blur', blurHandler); loadBookmarks(); }
+        });
+      });
+    });
+  } catch (error) {
+    debugLog('Error', 'Failed to load bookmarks', { error: error.message });
+    showError('Failed to load bookmarks: ' + error.message);
+  }
+}
+
 async function handleBookmarkClick(tab, timestamp) {
   try {
     await waitForContentScript(tab.id);
-    await sendMessageToTab(tab.id, { 
-      action: "setTimestamp", 
-      timestamp: parseFloat(timestamp) 
-    });
+    await sendMessageToTab(tab.id, { action: 'setTimestamp', timestamp: parseFloat(timestamp) });
   } catch (error) {
-    debugLog('Bookmarks', 'Error setting timestamp', { error: error.message });
-    console.error("Error setting timestamp:", error);
-    showError("Failed to navigate to timestamp: " + error.message);
+    showError('Failed to navigate to timestamp: ' + error.message);
   }
 }
 
-// Initialize popup
-document.addEventListener("DOMContentLoaded", () => {
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
   debugLog('Init', 'Popup opened');
+
+  const tab = await getCurrentTab().catch(() => null);
+  if (tab) await migrateToSync(tab.id).catch(() => {});
+
   loadBookmarks();
-  
-  // Add bookmark button click handler
-  document.getElementById("add-bookmark").addEventListener("click", async () => {
+
+  // Pre-warm transcript cache while the popup is loading
+  getCurrentTab().then(t => {
+    if (t?.url?.includes('youtube.com/watch')) {
+      sendMessageToTab(t.id, { action: 'prefetchTranscript' }).catch(() => {});
+    }
+  }).catch(() => {});
+
+  document.getElementById('share-btn').addEventListener('click', shareBookmarks);
+
+  // ── Auto-fill from transcript ──────────────────────────────────────────────
+  document.getElementById('auto-fill-btn').addEventListener('click', async () => {
+    const btn   = document.getElementById('auto-fill-btn');
+    const input = document.getElementById('description');
     try {
-      debugLog('UI', 'Add bookmark button clicked');
       const tab = await getCurrentTab();
-      
-      if (!tab.url.includes("youtube.com/watch")) {
-        throw new Error("Please navigate to a YouTube video first!");
+      if (!tab.url.includes('youtube.com/watch')) return;
+
+      btn.textContent = '…';
+      btn.disabled    = true;
+
+      await waitForContentScript(tab.id);
+      const tsRes = await sendMessageToTab(tab.id, { action: 'getTimestamp' });
+      if (!tsRes?.timestamp) throw new Error('no timestamp');
+
+      const txRes = await sendMessageToTab(tab.id, {
+        action:    'getTranscriptAtTimestamp',
+        timestamp: tsRes.timestamp,
+      });
+
+      if (txRes?.text) {
+        input.value = txRes.text;
+        input.focus();
+        input.select();
+        btn.textContent = '✓';
+        btn.classList.add('auto-fill-btn--done');
+      } else {
+        btn.textContent = 'No transcript';
+      }
+    } catch {
+      btn.textContent = '✦ Auto';
+    } finally {
+      setTimeout(() => {
+        btn.textContent = '✦ Auto';
+        btn.classList.remove('auto-fill-btn--done');
+        btn.disabled = false;
+      }, 1800);
+    }
+  });
+
+  document.getElementById('add-bookmark').addEventListener('click', async () => {
+    try {
+      const tab = await getCurrentTab();
+      if (!tab.url.includes('youtube.com/watch')) {
+        throw new Error('Please navigate to a YouTube video first!');
       }
 
       const videoId = extractVideoId(tab.url);
-      if (!videoId) {
-        throw new Error("Could not find a valid YouTube video ID");
-      }
+      if (!videoId) throw new Error('Could not find a valid YouTube video ID');
 
-      debugLog('Bookmarks', 'Getting current timestamp');
       await waitForContentScript(tab.id);
-      const response = await sendMessageToTab(tab.id, { action: "getTimestamp" });
+      const response = await sendMessageToTab(tab.id, { action: 'getTimestamp' });
 
       if (response && response.timestamp != null) {
-        const description = document.getElementById("description").value;
-        const bookmark = { videoId, timestamp: response.timestamp, description };
-        await saveBookmark(bookmark);
-        document.getElementById("description").value = ""; // Clear input after saving
+        const description = document.getElementById('description').value;
+        await saveBookmark({ videoId, timestamp: response.timestamp, description });
+        document.getElementById('description').value = '';
       } else {
-        throw new Error("Could not get current video timestamp");
+        throw new Error('Could not get current video timestamp');
       }
     } catch (error) {
       debugLog('Error', 'Failed to add bookmark', { error: error.message });
-      console.error("Error:", error);
       showError(error.message);
     }
   });
 
-  // Add handler for View All Bookmarks link
-  document.getElementById('view-all-bookmarks').addEventListener('click', (e) => {
+  document.getElementById('view-all-bookmarks').addEventListener('click', e => {
     e.preventDefault();
-    chrome.tabs.create({
-      url: chrome.runtime.getURL('bookmarks.html')
-    });
+    chrome.tabs.create({ url: chrome.runtime.getURL('bookmarks.html') });
   });
 });
