@@ -76,6 +76,8 @@ async function deleteBookmark(videoId, bookmarkId) {
 let allBookmarks = [];
 let filterQuery  = '';
 let sortOrder    = 'newest';
+let viewMode     = localStorage.getItem('bm_viewMode') || 'cards';
+let selectedIds  = new Set();
 
 // ─── Sort & filter ────────────────────────────────────────────────────────────
 function applyFiltersAndSort(bookmarks) {
@@ -136,39 +138,77 @@ async function renderBookmarks() {
 
   const videoTitles = await getVideoTitles();
   container.innerHTML = '';
+  container.className = viewMode === 'list' ? 'list-view' : '';
+  selectedIds.clear();
+  updateBulkDeleteBtn();
 
-  // Instead of grouping by video strictly, we show them as cards, 
-  // but if we want to follow the "Card Layout" requirement per bookmark:
   filtered.forEach(b => {
     const videoId = b.videoId;
-    const title = b.videoTitle || videoTitles[videoId] || `Video: ${videoId}`;
-    const thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    const title   = b.videoTitle || videoTitles[videoId] || `Video: ${videoId}`;
+    const color   = b.color || '#14B8A6';
+    const el      = document.createElement('div');
 
-    const card = document.createElement('div');
-    card.className = 'bookmark-card-new';
-    card.innerHTML = `
-      <div class="card-thumbnail-wrapper">
-        <img src="${thumbnail}" alt="${title}" class="card-thumbnail">
-        <div class="card-timestamp-pill" style="background:${b.color || '#14B8A6'}">${formatTimestamp(b.timestamp)}</div>
-      </div>
-      <div class="card-content">
-        <h3 class="card-video-title" title="${title}">${title}</h3>
-        <p class="card-note">${b.description || 'No note added.'}</p>
+    if (viewMode === 'list') {
+      el.className = 'bookmark-row';
+      el.innerHTML = `
+        <input type="checkbox" class="bookmark-checkbox" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+        <span class="row-timestamp" style="color:${color}">${formatTimestamp(b.timestamp)}</span>
+        <div class="row-info">
+          <span class="row-video-title" title="${title}">${title}</span>
+          <span class="row-description">${b.description || 'No note added.'}</span>
+        </div>
         ${b.tags && b.tags.length
-          ? `<div class="card-tags">${b.tags.map(t =>
+          ? `<div class="row-tags">${b.tags.map(t =>
               `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
             ).join('')}</div>`
-          : ''}
-        <div class="card-actions">
-          <button class="btn-primary jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump to Video</button>
+          : '<div class="row-tags"></div>'}
+        <div class="row-actions">
+          <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy timestamped link">⎘</button>
+          <button class="btn-primary jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
           <button class="btn-secondary delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">Delete</button>
         </div>
-      </div>
-    `;
-    container.appendChild(card);
+      `;
+    } else {
+      const thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      el.className = 'bookmark-card-new';
+      el.innerHTML = `
+        <div class="card-thumbnail-wrapper">
+          <input type="checkbox" class="card-checkbox bookmark-checkbox" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+          <img src="${thumbnail}" alt="${title}" class="card-thumbnail">
+          <div class="card-timestamp-pill" style="background:${color}">${formatTimestamp(b.timestamp)}</div>
+        </div>
+        <div class="card-content">
+          <h3 class="card-video-title" title="${title}">${title}</h3>
+          <p class="card-note">${b.description || 'No note added.'}</p>
+          ${b.tags && b.tags.length
+            ? `<div class="card-tags">${b.tags.map(t =>
+                `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+              ).join('')}</div>`
+            : ''}
+          <div class="card-actions">
+            <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy timestamped link">⎘</button>
+            <button class="btn-primary jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump to Video</button>
+            <button class="btn-secondary delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">Delete</button>
+          </div>
+        </div>
+      `;
+    }
+    container.appendChild(el);
   });
 
   attachEventListeners();
+}
+
+function updateBulkDeleteBtn() {
+  const btn = document.getElementById('bulk-delete-btn');
+  const cnt = document.getElementById('bulk-count');
+  if (!btn) return;
+  if (selectedIds.size > 0) {
+    btn.style.display = '';
+    cnt.textContent = selectedIds.size;
+  } else {
+    btn.style.display = 'none';
+  }
 }
 
 function attachEventListeners() {
@@ -178,11 +218,33 @@ function attachEventListeners() {
     });
   });
 
+  document.querySelectorAll('.copy-link').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const { videoId, timestamp } = e.currentTarget.dataset;
+      const url = `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(parseFloat(timestamp))}`;
+      await navigator.clipboard.writeText(url);
+      showToast('Link copied!', 'success');
+    });
+  });
+
+  document.querySelectorAll('.bookmark-checkbox').forEach(cb => {
+    cb.addEventListener('change', e => {
+      e.stopPropagation();
+      const key = `${e.target.dataset.videoId}:${e.target.dataset.bookmarkId}`;
+      if (e.target.checked) selectedIds.add(key);
+      else selectedIds.delete(key);
+      updateBulkDeleteBtn();
+      const card = e.target.closest('.bookmark-card-new, .bookmark-row');
+      if (card) card.classList.toggle('selected', e.target.checked);
+    });
+  });
+
   document.querySelectorAll('.delete-bookmark').forEach(btn => {
     btn.addEventListener('click', async e => {
       const bookmarkId = parseInt(e.target.dataset.bookmarkId);
       const videoId    = e.target.dataset.videoId;
-      const card       = e.target.closest('.bookmark-card-new');
+      const card       = e.target.closest('.bookmark-card-new, .bookmark-row');
 
       card.classList.add('deleting');
       await new Promise(r => setTimeout(r, 300));
@@ -306,8 +368,15 @@ async function loadAllBookmarks() {
   }
 }
 
+// ─── View toggle ──────────────────────────────────────────────────────────────
+function updateViewToggle() {
+  document.getElementById('view-cards').classList.toggle('view-btn--active', viewMode === 'cards');
+  document.getElementById('view-list').classList.toggle('view-btn--active',  viewMode === 'list');
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  updateViewToggle();
   loadAllBookmarks();
 
   // Search
@@ -319,6 +388,42 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sort
   document.getElementById('sort-select').addEventListener('change', e => {
     sortOrder = e.target.value;
+    renderBookmarks();
+  });
+
+  // Bulk delete
+  document.getElementById('bulk-delete-btn').addEventListener('click', async () => {
+    if (selectedIds.size === 0) return;
+    const btn   = document.getElementById('bulk-delete-btn');
+    const count = selectedIds.size;
+    btn.disabled = true;
+    try {
+      for (const key of [...selectedIds]) {
+        const [videoId, bookmarkIdStr] = key.split(':');
+        const bookmarkId = parseInt(bookmarkIdStr);
+        await deleteBookmark(videoId, bookmarkId);
+        allBookmarks = allBookmarks.filter(b => !(b.videoId === videoId && b.id === bookmarkId));
+      }
+      selectedIds.clear();
+      await renderBookmarks();
+      showToast(`Deleted ${count} bookmark${count !== 1 ? 's' : ''}`, 'success');
+    } catch {
+      showToast('Failed to delete some bookmarks');
+      btn.disabled = false;
+    }
+  });
+
+  // View toggle
+  document.getElementById('view-cards').addEventListener('click', () => {
+    viewMode = 'cards';
+    localStorage.setItem('bm_viewMode', viewMode);
+    updateViewToggle();
+    renderBookmarks();
+  });
+  document.getElementById('view-list').addEventListener('click', () => {
+    viewMode = 'list';
+    localStorage.setItem('bm_viewMode', viewMode);
+    updateViewToggle();
     renderBookmarks();
   });
 

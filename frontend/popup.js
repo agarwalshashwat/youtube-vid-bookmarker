@@ -247,6 +247,7 @@ async function shareBookmarks() {
     btn.textContent = 'Sharing…';
     btn.disabled = true;
 
+    const { bmUser } = await syncGet({ bmUser: null });
     const response = await fetch(`${API_BASE}/api/share`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -254,6 +255,7 @@ async function shareBookmarks() {
         videoId,
         videoTitle: videoTitles[videoId] || '',
         bookmarks,
+        userId: bmUser?.userId || null,
       }),
     });
 
@@ -357,6 +359,7 @@ async function loadBookmarks() {
               ).join('')}</div>`
             : ''}
         </div>
+        <button class="copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" aria-label="Copy link" title="Copy timestamped link">⎘</button>
         <button class="delete-bookmark" aria-label="Delete bookmark">&times;</button>
       </div>
     `).join('');
@@ -365,6 +368,14 @@ async function loadBookmarks() {
       const id        = el.dataset.id;
       const vId       = el.dataset.videoId;
       const timestamp = el.dataset.timestamp;
+
+      // Copy link
+      el.querySelector('.copy-link').addEventListener('click', async e => {
+        e.stopPropagation();
+        const url = `https://www.youtube.com/watch?v=${vId}&t=${Math.floor(parseFloat(timestamp))}`;
+        await navigator.clipboard.writeText(url);
+        showStatus('Link copied!');
+      });
 
       // Delete
       el.querySelector('.delete-bookmark').addEventListener('click', async e => {
@@ -426,6 +437,24 @@ async function handleBookmarkClick(tab, timestamp) {
   }
 }
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+async function loadAuthState() {
+  const { bmUser } = await syncGet({ bmUser: null });
+  const signinBtn  = document.getElementById('signin-btn');
+  const userChip   = document.getElementById('user-chip');
+  if (!signinBtn || !userChip) return;
+
+  if (bmUser) {
+    signinBtn.style.display  = 'none';
+    userChip.style.display   = '';
+    userChip.textContent     = bmUser.userEmail?.split('@')[0] || 'Signed in';
+    userChip.title           = bmUser.userEmail || '';
+  } else {
+    signinBtn.style.display  = '';
+    userChip.style.display   = 'none';
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   debugLog('Init', 'Popup opened');
@@ -442,7 +471,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }).catch(() => {});
 
+  loadAuthState();
+
   document.getElementById('share-btn').addEventListener('click', shareBookmarks);
+
+  document.getElementById('signin-btn').addEventListener('click', async () => {
+    const tab = await getCurrentTab().catch(() => null);
+    if (!tab) return;
+    const url = `${API_BASE}/signin?extensionId=${chrome.runtime.id}`;
+    chrome.tabs.create({ url });
+  });
 
   // ── Auto-fill from transcript ──────────────────────────────────────────────
   document.getElementById('auto-fill-btn').addEventListener('click', async () => {
@@ -471,7 +509,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.textContent = '✓';
         btn.classList.add('auto-fill-btn--done');
       } else {
-        btn.textContent = 'No transcript';
+        const chRes = await sendMessageToTab(tab.id, { action: 'getCurrentChapter' }).catch(() => null);
+        if (chRes?.chapter) {
+          input.value = chRes.chapter;
+          input.focus();
+          input.select();
+          btn.textContent = '✓';
+          btn.classList.add('auto-fill-btn--done');
+        } else {
+          btn.textContent = 'No transcript';
+        }
       }
     } catch {
       btn.textContent = '✦ Auto';

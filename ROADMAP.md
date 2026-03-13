@@ -57,20 +57,21 @@
 
 ---
 
-## Phase 2 — Richer Bookmarks 🔲 Not started
+## Phase 2 — Richer Bookmarks ✅ Mostly done
 
 > Goal: More power without adding a backend.
 
-- [ ] **Auto-fill from YouTube chapters** — detect YouTube chapter markers in the DOM and pre-fill the description with the current chapter name when bookmarking
-- [ ] **Bulk delete** — checkbox-select multiple bookmarks and delete all at once in the dashboard
-- [ ] **Bookmark reordering** — drag to reorder bookmarks within a video
-- [ ] **Copy timestamped link** — one-click copy of `youtube.com/watch?v=...&t=...` to clipboard
-- [ ] **Marker clustering** — when >8 markers overlap on the progress bar, cluster them to avoid visual noise
-- [ ] **Google Drive backup** — optional "Back up to Google Drive" using Google Picker API (no server needed, user owns their data)
+- [x] **Auto-fill from YouTube chapters** — reads `.ytp-chapter-title-content` from DOM; used as fallback in `✦ Auto` button and `Alt+S` silent save
+- [x] **Bulk delete** — checkbox overlay on cards / inline in list view; "Delete (N)" button appears in dashboard toolbar when items are selected
+- [ ] **Bookmark reordering** — drag to reorder bookmarks within a video *(deferred — needs drag-and-drop)*
+- [x] **Copy timestamped link** — ⎘ button on every bookmark in popup and dashboard (both card + list views)
+- [x] **Marker clustering** — when >8 bookmarks on a video, nearby markers (within 0.8% of duration) merge into a wider cluster marker with multi-line tooltip
+- [ ] **Google Drive backup** — optional "Back up to Google Drive" using Google Picker API *(deferred — needs OAuth)*
+- [x] **YouTube player bookmark button** *(bonus)* — bookmark icon injected into `.ytp-right-controls`, pulse animation on save; same as `Alt+S`
 
 ---
 
-## Phase 3 — Sharing & Social ✅ Partially done
+## Phase 3 — Sharing & Social ✅ Mostly done
 
 > Goal: Make bookmarks shareable — the core virality mechanic. **Requires a backend.**
 
@@ -83,20 +84,21 @@
 - [x] View count tracking per shared collection
 - [x] **Viral loop**: every user becomes a distribution channel when they share a "curated guide" to a video
 
-### 3.2 User Accounts
-- [ ] Sign in with Google (OAuth)
-- [ ] Bookmarks stored in cloud, synced everywhere
-- [ ] Public profile: `bookmarker.app/@username` — all public collections
+### 3.2 User Accounts ✅ Done (auth + profiles; cloud sync deferred)
+- [x] **Sign in with Google (OAuth)** — extension opens `/signin?extensionId=...`, webapp completes OAuth, sends token back via `chrome.runtime.sendMessage`; stored as `bmUser` in sync storage
+- [x] **Sign in / Sign out UI** — `signin-btn` + `user-chip` in popup header; `loadAuthState()` reads `bmUser`
+- [x] **Public profile page** — `bookmarker.app/u/[username]` shows avatar, username, collection grid with thumbnails + bookmark snippets (auto-created via Supabase trigger on signup)
+- [ ] **Cloud bookmark sync** — write per-video bookmarks to Supabase when signed in *(deferred — needs sync strategy)*
 
-### 3.3 Collaboration (Teams)
+### 3.3 Collaboration (Teams) *(deferred — too complex for now)*
 - [ ] Shared collections — invite teammates to annotate a video together
 - [ ] Comments on individual bookmarks
-- [ ] Real-time sync (like Google Docs for video)
+- [ ] Real-time sync (Supabase Realtime)
 - [ ] Use cases: design reviews, QA on recorded sessions, team training
 
-### 3.4 Embed Widget
-- [ ] `<iframe>` embed of a bookmark collection for blogs and course platforms
-- [ ] Course creators can embed "chapter guides" on their own sites
+### 3.4 Embed Widget ✅ Done
+- [x] `<iframe>`-friendly page at `bookmarker.app/embed/[shareId]` — compact layout with bookmark list, Watch link, powered-by footer
+- [x] `next.config.ts` sets `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` for `/embed/*`
 
 ---
 

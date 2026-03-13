@@ -114,3 +114,20 @@ const TAG_COLORS = {
         }
     }
   });
+
+// ─── External message from webapp (auth token after OAuth) ────────────────────
+chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'AUTH_SUCCESS') {
+    chrome.storage.sync.set({
+      bmUser: {
+        userId:       message.userId,
+        userEmail:    message.userEmail,
+        accessToken:  message.accessToken,
+        refreshToken: message.refreshToken,
+      }
+    }, () => {
+      sendResponse({ ok: true });
+    });
+    return true; // async
+  }
+});

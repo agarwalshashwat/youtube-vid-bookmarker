@@ -313,6 +313,30 @@ body {
   color: #ef4444;
 }
 
+/* Copy link button — mirrors delete-bookmark */
+.copy-link {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.bookmark:hover .copy-link { opacity: 1; }
+.copy-link:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────────── */
 .popup-footer {
   padding: 10px 12px 14px;
@@ -483,6 +507,40 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── Sign-in button ──────────────────────────────────────────────────────────── */
+.signin-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.signin-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+/* ── User chip (shown when signed in) ───────────────────────────────────────── */
+.user-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-light);
+  border-radius: 20px;
+  padding: 4px 10px;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
 }
 
 /* ── Shared nav-links (legacy, kept for compatibility) ───────────────────────── */

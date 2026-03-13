@@ -94,6 +94,7 @@ function setupBookmarkMarkers() {
   container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;';
   progressBar.appendChild(container);
   updateBookmarkMarkers();
+  setupPlayerBookmarkButton();
 
   // Pre-warm transcript cache now that the player is ready
   fetchTranscript().catch(() => {});
@@ -102,6 +103,58 @@ function setupBookmarkMarkers() {
     debugLog('Video', 'Duration changed', { duration: video.duration });
     updateBookmarkMarkers();
   });
+}
+
+// ─── Player bookmark button ───────────────────────────────────────────────────
+function setupPlayerBookmarkButton() {
+  if (document.querySelector('.yt-bookmark-player-btn')) return;
+
+  const controls = document.querySelector('.ytp-right-controls');
+  if (!controls) return;
+
+  const btn = document.createElement('button');
+  btn.className  = 'ytp-button yt-bookmark-player-btn';
+  btn.title      = 'Bookmark this moment (Alt+S)';
+  btn.innerHTML  = `<svg viewBox="0 0 24 24" width="24" height="24" focusable="false">
+    <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z" fill="currentColor"/>
+  </svg>`;
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    silentSaveBookmark();
+  });
+
+  // Insert before the first button in right-controls (settings gear or similar)
+  controls.insertBefore(btn, controls.firstChild);
+  debugLog('PlayerBtn', 'Bookmark button injected');
+}
+
+// ─── Marker clustering ────────────────────────────────────────────────────────
+function clusterBookmarks(bookmarks, duration) {
+  if (bookmarks.length <= 8 || !duration) return bookmarks.map(b => ({ ...b, isCluster: false }));
+
+  const sorted    = [...bookmarks].sort((a, b) => a.timestamp - b.timestamp);
+  const threshold = duration * 0.008; // 0.8% of video duration
+  const result    = [];
+  let i = 0;
+
+  while (i < sorted.length) {
+    const group = [sorted[i]];
+    let j = i + 1;
+    while (j < sorted.length && sorted[j].timestamp - sorted[i].timestamp < threshold) {
+      group.push(sorted[j]);
+      j++;
+    }
+    if (group.length === 1) {
+      result.push({ ...group[0], isCluster: false });
+    } else {
+      const mid   = group[Math.floor(group.length / 2)];
+      const label = `×${group.length}: ` + group.map(b => `${formatTimestamp(b.timestamp)} — ${b.description || 'No description'}`).join(' | ');
+      result.push({ ...mid, isCluster: true, clusterCount: group.length, clusterLabel: label });
+    }
+    i = j;
+  }
+  return result;
 }
 
 // ─── Render markers ───────────────────────────────────────────────────────────
@@ -121,19 +174,22 @@ function updateBookmarkMarkers() {
     debugLog('Markers', 'Rendering markers', { count: bookmarks.length });
 
     const duration = video.duration;
-    bookmarks.forEach(bookmark => {
+    const items = clusterBookmarks(bookmarks, duration);
+    items.forEach(bookmark => {
       const color = bookmark.color || getTagColor(bookmark.tags || []);
 
       const marker = document.createElement('div');
-      marker.className = 'yt-bookmark-marker';
+      marker.className = bookmark.isCluster ? 'yt-bookmark-marker yt-bookmark-cluster' : 'yt-bookmark-marker';
       marker.setAttribute('data-timestamp', bookmark.timestamp);
-      marker.setAttribute('data-description',
-        `${formatTimestamp(bookmark.timestamp)} — ${bookmark.description || 'No description'}`);
+      marker.setAttribute('data-description', bookmark.isCluster
+        ? bookmark.clusterLabel
+        : `${formatTimestamp(bookmark.timestamp)} — ${bookmark.description || 'No description'}`);
 
       marker.style.left            = `${(bookmark.timestamp / duration) * 100}%`;
       marker.style.backgroundColor = color;
       marker.style.boxShadow       = `0 0 4px ${color}80`;
       marker.style.pointerEvents   = 'auto';
+      if (bookmark.isCluster) marker.style.width = '5px';
 
       marker.addEventListener('click', () => {
         debugLog('Marker', 'Clicked', { timestamp: bookmark.timestamp });
@@ -166,8 +222,16 @@ async function fetchTranscript() {
       const ytData = window.ytInitialPlayerResponse;
       const tracks = ytData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
-      if (!tracks || tracks.length === 0) {
-        debugLog('Transcript', 'No caption tracks available');
+      if (!tracks) {
+        // ytInitialPlayerResponse not ready yet — don't cache, allow retry
+        debugLog('Transcript', 'Captions data not available yet, will retry on next call');
+        cachedTranscript = null;
+        transcriptFetchPromise = null;
+        return [];
+      }
+
+      if (tracks.length === 0) {
+        debugLog('Transcript', 'No caption tracks available for this video');
         cachedTranscript = [];
         return [];
       }
@@ -247,6 +311,12 @@ function cleanTranscriptText(text) {
   return t || null;
 }
 
+// ─── Chapter detection ───────────────────────────────────────────────────────
+function getCurrentChapter() {
+  const el = document.querySelector('.ytp-chapter-title-content');
+  return el ? el.textContent.trim() || null : null;
+}
+
 // ─── Silent save (Alt+S) ──────────────────────────────────────────────────────
 async function silentSaveBookmark() {
   video = document.querySelector('video') || video;
@@ -262,7 +332,8 @@ async function silentSaveBookmark() {
   // Try transcript first, fall back to "Bookmark at M:SS"
   const transcript     = await fetchTranscript().catch(() => null);
   const transcriptText = transcript ? getTextAtTimestamp(transcript, timestamp) : null;
-  const description    = transcriptText || `Bookmark at ${formatTimestamp(timestamp)}`;
+  const chapter     = getCurrentChapter();
+  const description = transcriptText || chapter || `Bookmark at ${formatTimestamp(timestamp)}`;
 
   try {
     const result = await new Promise(resolve =>
@@ -291,6 +362,8 @@ async function silentSaveBookmark() {
 
     updateBookmarkMarkers();
     showSilentSaveIndicator(description);
+    const playerBtn = document.querySelector('.yt-bookmark-player-btn');
+    if (playerBtn) { playerBtn.classList.add('saving'); setTimeout(() => playerBtn.classList.remove('saving'), 400); }
     debugLog('Silent', 'Saved silent bookmark', { timestamp, description });
   } catch (error) {
     debugLog('Silent', 'Failed', { error: error.message });
@@ -330,7 +403,7 @@ function handleKeyboardShortcut(event) {
 // ─── Message listener ─────────────────────────────────────────────────────────
 function initializeMessageListener() {
   debugLog('Messaging', 'Setting up message listener');
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     debugLog('Messaging', 'Received', { action: request.action });
 
     const handle = async () => {
@@ -350,6 +423,10 @@ function initializeMessageListener() {
           currentTime: activeVideo ? activeVideo.currentTime : 0,
           title: titleEl ? titleEl.textContent.trim() : null
         });
+        return;
+      }
+      if (request.action === 'getCurrentChapter') {
+        sendResponse({ chapter: getCurrentChapter() });
         return;
       }
       if (request.action === 'getTranscriptSnippet') {
@@ -550,6 +627,39 @@ function injectStyles() {
     .yt-bookmark-toast--show {
       opacity: 1;
       transform: translateY(0);
+    }
+    .yt-bookmark-cluster::after {
+      white-space: normal;
+      max-width: 300px;
+      word-break: break-word;
+      font-size: 11px;
+    }
+
+    /* Player bookmark button */
+    .yt-bookmark-player-btn {
+      color: white;
+      opacity: 0.9;
+      width: 40px !important;
+      height: 40px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 0 !important;
+      transition: opacity 0.15s, transform 0.15s;
+      vertical-align: middle;
+    }
+    .yt-bookmark-player-btn:hover {
+      opacity: 1;
+      transform: scale(1.15);
+      color: #14B8A6;
+    }
+    .yt-bookmark-player-btn.saving {
+      animation: bm-pulse 0.4s ease;
+    }
+    @keyframes bm-pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.3); color: #14B8A6; }
+      100% { transform: scale(1); }
     }
   `;
   document.head.appendChild(style);

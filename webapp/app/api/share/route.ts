@@ -9,10 +9,11 @@ export async function OPTIONS() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { videoId, videoTitle, bookmarks } = body as {
+    const { videoId, videoTitle, bookmarks, userId } = body as {
       videoId: string;
       videoTitle: string;
       bookmarks: Bookmark[];
+      userId?: string;
     };
 
     if (!videoId || !Array.isArray(bookmarks) || bookmarks.length === 0) {
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
         video_id:    videoId,
         video_title: videoTitle || null,
         bookmarks:   sorted,
+        user_id:     userId || null,
       })
       .select('id')
       .single();

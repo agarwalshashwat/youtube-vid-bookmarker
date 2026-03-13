@@ -1,0 +1,64 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+
+function ExtensionSuccessInner() {
+  const params    = useSearchParams();
+  const [status, setStatus] = useState<'sending' | 'done' | 'error'>('sending');
+
+  useEffect(() => {
+    const extensionId  = params.get('extensionId');
+    const accessToken  = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    const userId       = params.get('user_id');
+    const userEmail    = params.get('user_email');
+
+    if (!extensionId || !accessToken) { setStatus('error'); return; }
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cr = (window as any).chrome?.runtime;
+      if (cr?.sendMessage) {
+        cr.sendMessage(extensionId, { type: 'AUTH_SUCCESS', accessToken, refreshToken, userId, userEmail });
+      }
+      setStatus('done');
+      setTimeout(() => window.close(), 1800);
+    } catch {
+      setStatus('error');
+    }
+  }, [params]);
+
+  return (
+    <main style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', minHeight: '100vh', gap: 16,
+      fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+    }}>
+      {status === 'sending' && <p style={{ color: '#6b7280' }}>Completing sign-in…</p>}
+      {status === 'done'    && (
+        <>
+          <span style={{ fontSize: 40 }}>✓</span>
+          <p style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Signed in!</p>
+          <p style={{ fontSize: 13, color: '#6b7280' }}>This tab will close automatically.</p>
+        </>
+      )}
+      {status === 'error' && (
+        <>
+          <span style={{ fontSize: 40 }}>✗</span>
+          <p style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Sign-in failed</p>
+          <p style={{ fontSize: 13, color: '#6b7280' }}>Please close this tab and try again.</p>
+        </>
+      )}
+    </main>
+  );
+}
+
+export default function ExtensionSuccessPage() {
+  return (
+    <Suspense>
+      <ExtensionSuccessInner />
+    </Suspense>
+  );
+}

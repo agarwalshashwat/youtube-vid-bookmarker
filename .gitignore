@@ -45,6 +45,7 @@ webapp/build
 
 # Environment variables
 .env
+webapp/.env
 .env.local
 .env.development.local
 .env.test.local
@@ -56,3 +57,4 @@ webapp/build
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+.claude/

@@ -24,6 +24,11 @@
                 <option value="oldest">Oldest first</option>
                 <option value="timestamp">By timestamp</option>
             </select>
+            <button id="bulk-delete-btn" class="toolbar-btn toolbar-btn--danger" style="display:none">Delete (<span id="bulk-count">0</span>)</button>
+            <div class="view-toggle">
+                <button id="view-cards" class="toolbar-btn view-btn" title="Card view">⊞</button>
+                <button id="view-list"  class="toolbar-btn view-btn" title="List view">☰</button>
+            </div>
             <div class="toolbar-actions">
                 <button id="export-json" class="toolbar-btn">↓ JSON</button>
                 <button id="export-csv"  class="toolbar-btn">↓ CSV</button>
