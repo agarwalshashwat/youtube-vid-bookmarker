@@ -39,9 +39,13 @@ function ExtensionSuccessInner() {
       {status === 'sending' && <p style={{ color: '#6b7280' }}>Completing sign-in…</p>}
       {status === 'done'    && (
         <>
-          <span style={{ fontSize: 40 }}>✓</span>
-          <p style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Signed in!</p>
-          <p style={{ fontSize: 13, color: '#6b7280' }}>This tab will close automatically.</p>
+          <span style={{
+            width: 56, height: 56, background: '#f0fdfa', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 26, color: '#14B8A6',
+          }}>✓</span>
+          <p style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>Signed in to Clipmark!</p>
+          <p style={{ fontSize: 13, color: '#6b7280' }}>You can close this tab and return to YouTube.</p>
         </>
       )}
       {status === 'error' && (

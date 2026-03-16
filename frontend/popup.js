@@ -612,6 +612,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   loadAuthState();
 
+  // Refresh auth state live when sign-in completes in another tab
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.bmUser) loadAuthState();
+  });
+
   document.getElementById('summarize-btn').addEventListener('click', summarizeBookmarks);
   document.getElementById('summary-close').addEventListener('click', () => {
     document.getElementById('summary-panel').style.display = 'none';

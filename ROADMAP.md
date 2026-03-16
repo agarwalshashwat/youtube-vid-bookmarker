@@ -13,6 +13,7 @@
 | Storage | `chrome.storage.sync` (local) + Supabase `user_bookmarks` (cloud, when signed in) |
 | Platforms | YouTube only, Chrome only |
 | Users | Accounts via Google OAuth · public shareable pages · public profiles |
+| Live at | https://clipmark-chi.vercel.app |
 
 ---
 

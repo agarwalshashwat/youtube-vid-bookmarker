@@ -40,7 +40,7 @@ export default async function SignInPage({
           fontSize: 14, color: 'white',
         }}>▶</span>
         <span style={{ fontSize: 20, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>
-          Bookmarker
+          Clipmark
         </span>
       </div>
 
@@ -53,7 +53,7 @@ export default async function SignInPage({
       }}>
         <div>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 6 }}>
-            Sign in to Bookmarker
+            Sign in to Clipmark
           </h1>
           <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
             {extensionId
