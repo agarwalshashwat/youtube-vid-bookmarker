@@ -60,3 +60,31 @@ CREATE INDEX IF NOT EXISTS idx_collections_user_id ON public.collections (user_i
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
 CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+-- ─── Phase 3.2: Cloud Bookmark Sync ──────────────────────────────────────────
+
+-- Per-user per-video bookmark storage
+CREATE TABLE public.user_bookmarks (
+  user_id     UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  video_id    TEXT        NOT NULL,
+  bookmarks   JSONB       NOT NULL DEFAULT '[]',
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, video_id)
+);
+
+CREATE INDEX idx_user_bookmarks_user_id ON public.user_bookmarks (user_id);
+
+-- RLS: users can only read/write their own bookmarks
+ALTER TABLE public.user_bookmarks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own bookmarks"
+  ON public.user_bookmarks FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can upsert own bookmarks"
+  ON public.user_bookmarks FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own bookmarks"
+  ON public.user_bookmarks FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own bookmarks"
+  ON public.user_bookmarks FOR DELETE USING (auth.uid() = user_id);

@@ -31,6 +31,8 @@ const TAG_COLORS = {
   key:       '#f783ac',
 };
 
+function bmKey(videoId) { return `bm_${videoId}`; }
+
 function parseTags(description) {
   if (!description) return [];
   const matches = description.match(/#(\w+)/g);

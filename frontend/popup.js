@@ -106,6 +106,25 @@ async function getVideoBookmarks(videoId) {
 
 async function saveVideoBookmarks(videoId, bookmarks) {
   await syncSet({ [bmKey(videoId)]: bookmarks });
+  // Cloud sync: push to Supabase if signed in
+  syncToCloud(videoId, bookmarks);
+}
+
+async function syncToCloud(videoId, bookmarks) {
+  try {
+    const { bmUser } = await syncGet({ bmUser: null });
+    if (!bmUser?.accessToken) return;
+    await fetch(`${API_BASE}/api/bookmarks`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${bmUser.accessToken}`,
+      },
+      body: JSON.stringify({ videoId, bookmarks }),
+    });
+  } catch {
+    // Cloud sync is best-effort — don't block the user
+  }
 }
 
 async function getVideoTitles() {
@@ -182,6 +201,7 @@ async function saveBookmark(bookmark) {
     debugLog('Bookmarks', 'Saved bookmark', { description, tags });
 
     document.getElementById('description').value = '';
+    document.getElementById('tag-suggestions').style.display = 'none';
     showStatus('Bookmark saved ✓');
 
     await loadBookmarks();
@@ -222,6 +242,125 @@ async function updateBookmarkDescription(videoId, bookmarkId, newDescription) {
     try { await sendMessageToTab(tab.id, { action: 'bookmarkUpdated' }); } catch {}
   } catch (error) {
     showError('Failed to update bookmark: ' + error.message);
+  }
+}
+
+// ─── Smart Tag Suggestions ────────────────────────────────────────────────────
+async function suggestTags(description, transcript) {
+  const suggestionsEl = document.getElementById('tag-suggestions');
+  if (!description.trim()) {
+    suggestionsEl.style.display = 'none';
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/api/suggest-tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description, transcript }),
+    });
+    if (!response.ok) return;
+
+    const { tags } = await response.json();
+    if (!tags?.length) return;
+
+    const input = document.getElementById('description');
+    const existingTags = parseTags(input.value);
+    const newTags = tags.filter(t => !existingTags.includes(t));
+    if (!newTags.length) return;
+
+    suggestionsEl.innerHTML =
+      '<span class="tag-suggest-label">Suggested:</span>' +
+      newTags.map(t =>
+        `<button class="tag-suggest-chip" data-tag="${t}" style="background:${getTagColor([t])}">#${t}</button>`
+      ).join('');
+
+    suggestionsEl.querySelectorAll('.tag-suggest-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const tag = chip.dataset.tag;
+        const val = input.value.trim();
+        input.value = val ? `${val} #${tag}` : `#${tag}`;
+        chip.remove();
+        if (!suggestionsEl.querySelectorAll('.tag-suggest-chip').length) {
+          suggestionsEl.style.display = 'none';
+        }
+      });
+    });
+
+    suggestionsEl.style.display = 'flex';
+  } catch {
+    // Silently ignore — tag suggestions are non-critical
+  }
+}
+
+// ─── AI Summary ───────────────────────────────────────────────────────────────
+async function summarizeBookmarks() {
+  const btn = document.getElementById('summarize-btn');
+  const panel = document.getElementById('summary-panel');
+  const content = document.getElementById('summary-content');
+
+  // Toggle off if already open
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    return;
+  }
+
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) {
+      throw new Error('Please navigate to a YouTube video first!');
+    }
+
+    const videoId = extractVideoId(tab.url);
+    if (!videoId) throw new Error('Could not find video ID');
+
+    const bookmarks = await getVideoBookmarks(videoId);
+    if (bookmarks.length === 0) {
+      throw new Error('Add some bookmarks first');
+    }
+
+    const videoTitles = await getVideoTitles();
+
+    btn.textContent = '…';
+    btn.disabled = true;
+
+    const response = await fetch(`${API_BASE}/api/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookmarks,
+        videoTitle: videoTitles[videoId] || '',
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Server error');
+    }
+
+    const { summary, topics, actionItems } = await response.json();
+
+    let html = `<p class="summary-text">${summary}</p>`;
+
+    if (topics?.length) {
+      html += `<div class="summary-section"><strong>Topics</strong><ul>${
+        topics.map(t => `<li>${t}</li>`).join('')
+      }</ul></div>`;
+    }
+
+    if (actionItems?.length) {
+      html += `<div class="summary-section"><strong>Action items</strong><ul>${
+        actionItems.map(a => `<li>${a}</li>`).join('')
+      }</ul></div>`;
+    }
+
+    content.innerHTML = html;
+    panel.style.display = 'block';
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    btn.textContent = '✦ Summary';
+    btn.disabled = false;
   }
 }
 
@@ -473,6 +612,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   loadAuthState();
 
+  document.getElementById('summarize-btn').addEventListener('click', summarizeBookmarks);
+  document.getElementById('summary-close').addEventListener('click', () => {
+    document.getElementById('summary-panel').style.display = 'none';
+  });
+
   document.getElementById('share-btn').addEventListener('click', shareBookmarks);
 
   document.getElementById('signin-btn').addEventListener('click', async () => {
@@ -508,6 +652,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         input.select();
         btn.textContent = '✓';
         btn.classList.add('auto-fill-btn--done');
+        suggestTags(txRes.text, txRes.text);
       } else {
         const chRes = await sendMessageToTab(tab.id, { action: 'getCurrentChapter' }).catch(() => null);
         if (chRes?.chapter) {
@@ -516,6 +661,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           input.select();
           btn.textContent = '✓';
           btn.classList.add('auto-fill-btn--done');
+          suggestTags(chRes.chapter);
         } else {
           btn.textContent = 'No transcript';
         }

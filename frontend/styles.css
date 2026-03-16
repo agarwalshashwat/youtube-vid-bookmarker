@@ -40,7 +40,7 @@
 }
 
 body {
-  width: 360px;
+  width: 400px;
   background: var(--bg);
   font-family: var(--font);
   color: var(--text);
@@ -86,17 +86,113 @@ body {
 .popup-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+}
+
+.summarize-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: #f5f3ff;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.summarize-btn:hover:not(:disabled) {
+  background: #7c3aed;
+  color: white;
+}
+
+.summarize-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+@media (prefers-color-scheme: dark) {
+  .summarize-btn {
+    color: #a78bfa;
+    background: #2e1065;
+  }
+}
+
+/* ── Summary panel ─────────────────────────────────────────────────────────── */
+.summary-panel {
+  margin: 0 10px 8px;
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.summary-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.summary-panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #7c3aed;
+  text-transform: uppercase;
+}
+
+.summary-close {
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.summary-close:hover { color: var(--text); }
+
+.summary-text {
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+
+.summary-section {
+  margin-top: 6px;
+}
+
+.summary-section strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 3px;
+}
+
+.summary-section ul {
+  padding-left: 16px;
+  color: var(--text-sub);
+}
+
+.summary-section li {
+  margin-bottom: 2px;
 }
 
 .share-btn {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--accent);
   background: var(--accent-light);
   border: 1px solid transparent;
   border-radius: 20px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
@@ -118,11 +214,11 @@ body {
 }
 
 .all-bookmarks-link {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-sub);
   text-decoration: none;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 20px;
   border: 1px solid var(--border);
   transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -387,6 +483,38 @@ body {
   border-color: transparent !important;
 }
 
+/* ── Tag suggestions ──────────────────────────────────────────────────────── */
+.tag-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0 2px;
+}
+
+.tag-suggest-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tag-suggest-chip {
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 2px 7px;
+  cursor: pointer;
+  opacity: 0.88;
+  transition: opacity 0.1s, transform 0.1s;
+}
+
+.tag-suggest-chip:hover {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
 #description {
   width: 100%;
   padding: 8px 11px;
@@ -511,13 +639,13 @@ body {
 
 /* ── Sign-in button ──────────────────────────────────────────────────────────── */
 .signin-btn {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-sub);
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   white-space: nowrap;

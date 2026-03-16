@@ -8,11 +8,11 @@
 
 | Property | Value |
 |----------|-------|
-| Type | Chrome Extension (Manifest V3) |
-| Stack | Vanilla JS, no build step, no dependencies |
-| Storage | `chrome.storage.sync` (per-video keys) |
+| Type | Chrome Extension (Manifest V3) + Next.js 14 webapp |
+| Stack | Vanilla JS extension · Next.js + TypeScript + Supabase backend |
+| Storage | `chrome.storage.sync` (local) + Supabase `user_bookmarks` (cloud, when signed in) |
 | Platforms | YouTube only, Chrome only |
-| Users | Solo — no accounts, no sharing |
+| Users | Accounts via Google OAuth · public shareable pages · public profiles |
 
 ---
 
@@ -84,11 +84,11 @@
 - [x] View count tracking per shared collection
 - [x] **Viral loop**: every user becomes a distribution channel when they share a "curated guide" to a video
 
-### 3.2 User Accounts ✅ Done (auth + profiles; cloud sync deferred)
+### 3.2 User Accounts ✅ Done
 - [x] **Sign in with Google (OAuth)** — extension opens `/signin?extensionId=...`, webapp completes OAuth, sends token back via `chrome.runtime.sendMessage`; stored as `bmUser` in sync storage
 - [x] **Sign in / Sign out UI** — `signin-btn` + `user-chip` in popup header; `loadAuthState()` reads `bmUser`
 - [x] **Public profile page** — `bookmarker.app/u/[username]` shows avatar, username, collection grid with thumbnails + bookmark snippets (auto-created via Supabase trigger on signup)
-- [ ] **Cloud bookmark sync** — write per-video bookmarks to Supabase when signed in *(deferred — needs sync strategy)*
+- [x] **Cloud bookmark sync** — `PUT /api/bookmarks` upserts per-video bookmarks to `user_bookmarks` table; called automatically after every save/delete when signed in; Bearer token auth for extension requests
 
 ### 3.3 Collaboration (Teams) *(deferred — too complex for now)*
 - [ ] Shared collections — invite teammates to annotate a video together
@@ -98,11 +98,11 @@
 
 ### 3.4 Embed Widget ✅ Done
 - [x] `<iframe>`-friendly page at `bookmarker.app/embed/[shareId]` — compact layout with bookmark list, Watch link, powered-by footer
-- [x] `next.config.ts` sets `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` for `/embed/*`
+- [x] `next.config.mjs` sets `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` for `/embed/*`
 
 ---
 
-## Phase 4 — AI Features ✅ Partially done
+## Phase 4 — AI Features ✅ Mostly done
 
 > Goal: Make the product intelligent — move from "manual notes" to "smart notes".
 
@@ -114,14 +114,17 @@
 - [x] **Alt+S silent save** now uses transcript text instead of generic "Bookmark at M:SS"
 - [x] Transcript is cached per-video; cache invalidates automatically on SPA navigation
 
-### 4.2 AI Summary of Bookmarks
-- [ ] "Summarize this video based on my bookmarks" — send bookmark descriptions + timestamps to Claude API
-- [ ] Returns structured summary: key topics, decisions, action items
-- [ ] Export to Markdown / email / Notion
+### 4.2 AI Summary of Bookmarks ✅ Done
+- [x] **"✦ Summary" button** in popup header — sends bookmarks to `POST /api/summarize`
+- [x] Returns structured result: overview paragraph, key topics list, action items list
+- [x] Inline panel in popup (collapsible); uses `claude-haiku-4-5` for speed
+- [ ] Export to Markdown / email / Notion *(future)*
 
-### 4.3 Smart Tagging
-- [ ] Auto-suggest tags based on description text and surrounding transcript
-- [ ] Cluster bookmarks by topic across multiple videos
+### 4.3 Smart Tagging ✅ Done
+- [x] **Auto-suggest tags** after ✦ Auto fill — calls `POST /api/suggest-tags` with description + transcript
+- [x] Suggested tags appear as clickable color chips; click to append `#tag` to description
+- [x] Prefers named tags (important, review, note, question, todo, key); falls back to custom tags
+- [ ] Cluster bookmarks by topic across multiple videos *(future)*
 
 ### 4.4 Semantic Search
 - [ ] "Find all bookmarks where they mention authentication"
@@ -182,18 +185,21 @@
 ```
 DONE
   ✅ Phase 1    Polish core (UX, tags, export, sync, redesign)
+  ✅ Phase 2    Bulk delete, chapter auto-fill, copy link, player button, marker clustering
   ✅ Phase 3.1  Shareable public pages (Next.js + Supabase)
+  ✅ Phase 3.2  User accounts + cloud bookmark sync
+  ✅ Phase 3.4  Embed widget (/embed/[shareId])
   ✅ Phase 4.1  AI auto-description from transcript
+  ✅ Phase 4.2  AI summary panel in popup (Claude Haiku)
+  ✅ Phase 4.3  Smart tag suggestions after auto-fill
 
-NEXT  (no backend, fast to ship)
-  → Phase 2    Bulk delete, chapter auto-fill, Drive backup, copy link
-
-THEN  (grow user base)
-  → Phase 3.2  User accounts (Google OAuth)
+NEXT  (go live)
   → Deploy webapp to Vercel + point API_BASE at production URL
+  → Run Supabase migration for user_bookmarks table (Phase 3.2 schema)
+  → Add ANTHROPIC_API_KEY to Vercel env vars (Phase 4.2/4.3)
 
 LATER  (monetize)
-  → Phase 4.2–4.4  AI summaries + smart tagging + semantic search
+  → Phase 4.4  Semantic search across bookmarks
   → Phase 3.3      Teams / collaboration
   → Phase 5        Multi-platform + multi-browser
   → Phase 6        Integrations

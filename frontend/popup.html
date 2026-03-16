@@ -13,6 +13,7 @@
       <span class="popup-logo-text">Bookmarker</span>
     </div>
     <div class="popup-header-actions">
+      <button id="summarize-btn" class="summarize-btn" title="AI summary of your bookmarks">✦ Summary</button>
       <button id="share-btn" class="share-btn" title="Share bookmarks for this video">↗ Share</button>
       <button id="signin-btn" class="signin-btn" title="Sign in to sync across devices" style="display:none">Sign in</button>
       <div id="user-chip" class="user-chip" style="display:none"></div>
@@ -31,11 +32,20 @@
     <div class="loading-spinner" style="display:none;">Loading…</div>
   </div>
 
+  <div id="summary-panel" class="summary-panel" style="display:none;">
+    <div class="summary-panel-header">
+      <span class="summary-panel-title">✦ AI Summary</span>
+      <button id="summary-close" class="summary-close" title="Close">&times;</button>
+    </div>
+    <div id="summary-content" class="summary-content"></div>
+  </div>
+
   <div class="popup-footer">
     <div class="description-row">
       <input type="text" id="description" placeholder="Add a note (#tag) about this moment">
       <button id="auto-fill-btn" class="auto-fill-btn" title="Auto-fill from video transcript">✦ Auto</button>
     </div>
+    <div id="tag-suggestions" class="tag-suggestions" style="display:none;"></div>
     <button id="add-bookmark">Save Bookmark</button>
   </div>
 
