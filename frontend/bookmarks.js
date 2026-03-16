@@ -147,9 +147,14 @@ async function renderBookmarks() {
 
   const videoTitles = await getVideoTitles();
   container.innerHTML = '';
-  container.className = viewMode === 'list' ? 'list-view' : '';
+  container.className = '';
   selectedIds.clear();
   updateBulkDeleteBtn();
+
+  if (viewMode === 'timeline') {
+    renderTimelineView(filtered, container);
+    return;
+  }
 
   const grouped  = groupByVideo(filtered);
   const videoIds = Object.keys(grouped);
@@ -178,38 +183,8 @@ async function renderBookmarks() {
     const card = document.createElement('div');
     card.className = 'vc-card';
 
-    if (viewMode === 'list') {
-      // ── Compact list view ──────────────────────────────────────────────────
-      card.innerHTML = `
-        <div class="vc-list-head">
-          <span class="vc-list-icon">▶</span>
-          <a class="vc-list-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
-          <span class="vc-list-count">${count} clip${count !== 1 ? 's' : ''}</span>
-        </div>
-        <div class="vc-chapters">
-          ${bookmarks.map(b => {
-            const c = b.color || '#14B8A6';
-            return `
-              <div class="vc-chapter" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-                <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-                <span class="vc-dot-sm" style="background:${c}"></span>
-                <span class="vc-time" style="color:${c}">${formatTimestamp(b.timestamp)}</span>
-                <span class="vc-desc">${b.description || 'No note added.'}</span>
-                ${b.tags && b.tags.length
-                  ? `<div class="vc-tags">${b.tags.map(t =>
-                      `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
-                    ).join('')}</div>`
-                  : '<div class="vc-tags"></div>'}
-                <div class="vc-actions">
-                  <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
-                  <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
-                  <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
-                </div>
-              </div>`;
-          }).join('')}
-        </div>`;
-    } else {
-      // ── Chapter card view ──────────────────────────────────────────────────
+    // ── Chapter card view ────────────────────────────────────────────────────
+    {
       card.innerHTML = `
         <div class="vc-head">
           <a href="${ytUrl}" target="_blank" rel="noopener" class="vc-thumb-wrap">
@@ -256,6 +231,84 @@ async function renderBookmarks() {
 
     container.appendChild(card);
   });
+
+  attachEventListeners();
+}
+
+// ─── Timeline view ────────────────────────────────────────────────────────────
+function renderTimelineView(bookmarks, container) {
+  if (!bookmarks.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🔖</div>
+        <h3>No bookmarks yet.</h3>
+        <p>Save important moments from YouTube videos so you can revisit them later.</p>
+      </div>`;
+    return;
+  }
+
+  const sorted = [...bookmarks].sort((a, b) =>
+    new Date(a.createdAt || 0) - new Date(b.createdAt || 0)
+  );
+
+  // Group by month-year
+  const groups = [];
+  let currentKey = null;
+  sorted.forEach(b => {
+    const d   = new Date(b.createdAt || 0);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+    if (key !== currentKey) { groups.push({ label, items: [] }); currentKey = key; }
+    groups[groups.length - 1].items.push(b);
+  });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'tl-wrap';
+  let idx = 0;
+
+  groups.forEach(({ label, items }) => {
+    const period = document.createElement('div');
+    period.className = 'tl-period';
+    period.innerHTML = `<span class="tl-period-label">${label}</span>`;
+    wrap.appendChild(period);
+
+    items.forEach(b => {
+      const side  = idx % 2 === 0 ? 'tl-left' : 'tl-right';
+      const color = b.color || getTagColor(b.tags);
+      const tagsHtml = b.tags?.length
+        ? `<div class="tl-tags">${b.tags.map(t =>
+            `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+          ).join('')}</div>`
+        : '';
+
+      const cardHtml = `
+        <div class="tl-card">
+          <div class="tl-ts" style="color:${color}">${formatTimestamp(b.timestamp)}</div>
+          <div class="tl-video" title="${b.videoTitle || ''}">${b.videoTitle || 'Unknown video'}</div>
+          <div class="tl-desc">${b.description || 'No note added.'}</div>
+          ${tagsHtml}
+          <div class="tl-actions">
+            <button class="btn-icon copy-link" data-video-id="${b.videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
+            <button class="vc-jump jump-to-video" data-video-id="${b.videoId}" data-timestamp="${b.timestamp}">Jump</button>
+            <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${b.videoId}">×</button>
+          </div>
+        </div>`;
+      const nodeHtml = `<div class="tl-node"><div class="tl-dot" style="background:${color}"></div></div>`;
+      const empty    = `<div class="tl-empty"></div>`;
+
+      const entry = document.createElement('div');
+      entry.className = `tl-entry ${side}`;
+      entry.dataset.bookmarkId = b.id;
+      entry.dataset.videoId    = b.videoId;
+      entry.innerHTML = side === 'tl-left'
+        ? cardHtml + nodeHtml + empty
+        : empty    + nodeHtml + cardHtml;
+      wrap.appendChild(entry);
+      idx++;
+    });
+  });
+
+  container.appendChild(wrap);
 
   attachEventListeners();
 }
@@ -308,7 +361,7 @@ function attachEventListeners() {
       if (e.target.checked) selectedIds.add(key);
       else selectedIds.delete(key);
       updateBulkDeleteBtn();
-      const card = e.target.closest('.bookmark-card-new, .bookmark-row, .vg-row, .vc-chapter');
+      const card = e.target.closest('.vc-chapter, .tl-entry');
       if (card) card.classList.toggle('selected', e.target.checked);
     });
   });
@@ -317,7 +370,7 @@ function attachEventListeners() {
     btn.addEventListener('click', async e => {
       const bookmarkId = parseInt(e.target.dataset.bookmarkId);
       const videoId    = e.target.dataset.videoId;
-      const card       = e.target.closest('.bookmark-card-new, .bookmark-row, .vg-row, .vc-chapter');
+      const card       = e.target.closest('.vc-chapter, .tl-entry');
 
       card.classList.add('deleting');
       await new Promise(r => setTimeout(r, 300));
@@ -443,8 +496,8 @@ async function loadAllBookmarks() {
 
 // ─── View toggle ──────────────────────────────────────────────────────────────
 function updateViewToggle() {
-  document.getElementById('view-cards').classList.toggle('view-btn--active', viewMode === 'cards');
-  document.getElementById('view-list').classList.toggle('view-btn--active',  viewMode === 'list');
+  document.getElementById('view-cards').classList.toggle('view-btn--active',    viewMode === 'cards');
+  document.getElementById('view-timeline').classList.toggle('view-btn--active', viewMode === 'timeline');
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -493,8 +546,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateViewToggle();
     renderBookmarks();
   });
-  document.getElementById('view-list').addEventListener('click', () => {
-    viewMode = 'list';
+  document.getElementById('view-timeline').addEventListener('click', () => {
+    viewMode = 'timeline';
     localStorage.setItem('bm_viewMode', viewMode);
     updateViewToggle();
     renderBookmarks();
