@@ -110,29 +110,38 @@ function groupByVideo(bookmarks) {
   return groups;
 }
 
+// ─── Build timeline dots HTML for a video group ───────────────────────────────
+function buildTimeline(bookmarks) {
+  const maxTs    = Math.max(...bookmarks.map(b => b.timestamp));
+  // Always leave ≥60s of empty track after the last bookmark and use at least
+  // 2 minutes total, so a lone early bookmark doesn't sit at the far right.
+  const trackMax = Math.max(maxTs + 60, 120);
+  return bookmarks.map(b => {
+    const pct   = ((b.timestamp / trackMax) * 95).toFixed(2);
+    const color = b.color || '#14B8A6';
+    const label = `${formatTimestamp(b.timestamp)} — ${b.description || 'No note'}`;
+    return `<div class="vc-dot" style="left:${pct}%;background:${color}" title="${label}"></div>`;
+  }).join('');
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 async function renderBookmarks() {
   const container = document.getElementById('bookmarks-container');
   const filtered  = applyFiltersAndSort(allBookmarks);
 
   if (filtered.length === 0) {
-    if (allBookmarks.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">🔖</div>
-          <h3>No bookmarks yet</h3>
-          <p>Save important moments from YouTube videos so you can revisit them later.</p>
-        </div>
-      `;
-    } else {
-      container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">🔍</div>
-          <h3>No matches found</h3>
-          <p>Try adjusting your search or filters.</p>
-        </div>
-      `;
-    }
+    container.className = '';
+    container.innerHTML = allBookmarks.length === 0
+      ? `<div class="empty-state">
+           <div class="empty-state-icon">🔖</div>
+           <h3>No bookmarks yet</h3>
+           <p>Save important moments from YouTube videos so you can revisit them later.</p>
+         </div>`
+      : `<div class="empty-state">
+           <div class="empty-state-icon">🔍</div>
+           <h3>No matches found</h3>
+           <p>Try adjusting your search or filters.</p>
+         </div>`;
     return;
   }
 
@@ -142,58 +151,110 @@ async function renderBookmarks() {
   selectedIds.clear();
   updateBulkDeleteBtn();
 
-  filtered.forEach(b => {
-    const videoId = b.videoId;
-    const title   = b.videoTitle || videoTitles[videoId] || `Video: ${videoId}`;
-    const color   = b.color || '#14B8A6';
-    const el      = document.createElement('div');
+  const grouped  = groupByVideo(filtered);
+  const videoIds = Object.keys(grouped);
+
+  if (sortOrder === 'oldest') {
+    videoIds.sort((a, b) =>
+      Math.min(...grouped[a].map(x => x.id)) - Math.min(...grouped[b].map(x => x.id)));
+  } else if (sortOrder === 'timestamp') {
+    videoIds.sort((a, b) => {
+      const ta = (grouped[a][0].videoTitle || videoTitles[a] || a).toLowerCase();
+      const tb = (grouped[b][0].videoTitle || videoTitles[b] || b).toLowerCase();
+      return ta.localeCompare(tb);
+    });
+  } else {
+    videoIds.sort((a, b) =>
+      Math.max(...grouped[b].map(x => x.id)) - Math.max(...grouped[a].map(x => x.id)));
+  }
+
+  videoIds.forEach(videoId => {
+    const bookmarks = grouped[videoId];
+    const title  = bookmarks[0].videoTitle || videoTitles[videoId] || `Video: ${videoId}`;
+    const ytUrl  = `https://www.youtube.com/watch?v=${videoId}`;
+    const thumb  = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+    const count  = bookmarks.length;
+
+    const card = document.createElement('div');
+    card.className = 'vc-card';
 
     if (viewMode === 'list') {
-      el.className = 'bookmark-row';
-      el.innerHTML = `
-        <input type="checkbox" class="bookmark-checkbox" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-        <span class="row-timestamp" style="color:${color}">${formatTimestamp(b.timestamp)}</span>
-        <div class="row-info">
-          <span class="row-video-title" title="${title}">${title}</span>
-          <span class="row-description">${b.description || 'No note added.'}</span>
+      // ── Compact list view ──────────────────────────────────────────────────
+      card.innerHTML = `
+        <div class="vc-list-head">
+          <span class="vc-list-icon">▶</span>
+          <a class="vc-list-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
+          <span class="vc-list-count">${count} clip${count !== 1 ? 's' : ''}</span>
         </div>
-        ${b.tags && b.tags.length
-          ? `<div class="row-tags">${b.tags.map(t =>
-              `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
-            ).join('')}</div>`
-          : '<div class="row-tags"></div>'}
-        <div class="row-actions">
-          <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy timestamped link">⎘</button>
-          <button class="btn-primary jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
-          <button class="btn-secondary delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">Delete</button>
-        </div>
-      `;
+        <div class="vc-chapters">
+          ${bookmarks.map(b => {
+            const c = b.color || '#14B8A6';
+            return `
+              <div class="vc-chapter" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                <span class="vc-dot-sm" style="background:${c}"></span>
+                <span class="vc-time" style="color:${c}">${formatTimestamp(b.timestamp)}</span>
+                <span class="vc-desc">${b.description || 'No note added.'}</span>
+                ${b.tags && b.tags.length
+                  ? `<div class="vc-tags">${b.tags.map(t =>
+                      `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+                    ).join('')}</div>`
+                  : '<div class="vc-tags"></div>'}
+                <div class="vc-actions">
+                  <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
+                  <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
+                  <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
     } else {
-      const thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-      el.className = 'bookmark-card-new';
-      el.innerHTML = `
-        <div class="card-thumbnail-wrapper">
-          <input type="checkbox" class="card-checkbox bookmark-checkbox" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-          <img src="${thumbnail}" alt="${title}" class="card-thumbnail">
-          <div class="card-timestamp-pill" style="background:${color}">${formatTimestamp(b.timestamp)}</div>
-        </div>
-        <div class="card-content">
-          <h3 class="card-video-title" title="${title}">${title}</h3>
-          <p class="card-note">${b.description || 'No note added.'}</p>
-          ${b.tags && b.tags.length
-            ? `<div class="card-tags">${b.tags.map(t =>
-                `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
-              ).join('')}</div>`
-            : ''}
-          <div class="card-actions">
-            <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy timestamped link">⎘</button>
-            <button class="btn-primary jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump to Video</button>
-            <button class="btn-secondary delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">Delete</button>
+      // ── Chapter card view ──────────────────────────────────────────────────
+      card.innerHTML = `
+        <div class="vc-head">
+          <a href="${ytUrl}" target="_blank" rel="noopener" class="vc-thumb-wrap">
+            <img src="${thumb}" alt="${title}" class="vc-thumb" loading="lazy">
+          </a>
+          <div class="vc-meta">
+            <a class="vc-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
+            <div class="vc-count-row">
+              <span class="vc-count-icon">⏱</span>
+              <span class="vc-count-text">${count} bookmark${count !== 1 ? 's' : ''}</span>
+              <button class="vc-revision-btn" data-video-id="${videoId}">▶ Revision</button>
+            </div>
           </div>
         </div>
-      `;
+        <div class="vc-timeline-row">
+          <div class="vc-track">
+            ${buildTimeline(bookmarks)}
+          </div>
+        </div>
+        <div class="vc-chapters-label">Bookmarks</div>
+        <div class="vc-chapters">
+          ${bookmarks.map(b => {
+            const c = b.color || '#14B8A6';
+            return `
+              <div class="vc-chapter" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                <span class="vc-dot-sm" style="background:${c}"></span>
+                <span class="vc-time" style="color:${c}">${formatTimestamp(b.timestamp)}</span>
+                <span class="vc-desc">${b.description || 'No note added.'}</span>
+                ${b.tags && b.tags.length
+                  ? `<div class="vc-tags">${b.tags.map(t =>
+                      `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+                    ).join('')}</div>`
+                  : '<div class="vc-tags"></div>'}
+                <div class="vc-actions">
+                  <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
+                  <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
+                  <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
     }
-    container.appendChild(el);
+
+    container.appendChild(card);
   });
 
   attachEventListeners();
@@ -212,6 +273,18 @@ function updateBulkDeleteBtn() {
 }
 
 function attachEventListeners() {
+  document.querySelectorAll('.vc-revision-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const videoId   = btn.dataset.videoId;
+      const bookmarks = allBookmarks
+        .filter(b => b.videoId === videoId)
+        .sort((a, b) => a.timestamp - b.timestamp);
+      if (!bookmarks.length) return;
+      await chrome.storage.local.set({ pendingRevision: { videoId, bookmarks } });
+      chrome.tabs.create({ url: `https://www.youtube.com/watch?v=${videoId}` });
+    });
+  });
+
   document.querySelectorAll('.jump-to-video').forEach(btn => {
     btn.addEventListener('click', e => {
       jumpToVideo(e.target.dataset.videoId, parseFloat(e.target.dataset.timestamp));
@@ -235,7 +308,7 @@ function attachEventListeners() {
       if (e.target.checked) selectedIds.add(key);
       else selectedIds.delete(key);
       updateBulkDeleteBtn();
-      const card = e.target.closest('.bookmark-card-new, .bookmark-row');
+      const card = e.target.closest('.bookmark-card-new, .bookmark-row, .vg-row, .vc-chapter');
       if (card) card.classList.toggle('selected', e.target.checked);
     });
   });
@@ -244,7 +317,7 @@ function attachEventListeners() {
     btn.addEventListener('click', async e => {
       const bookmarkId = parseInt(e.target.dataset.bookmarkId);
       const videoId    = e.target.dataset.videoId;
-      const card       = e.target.closest('.bookmark-card-new, .bookmark-row');
+      const card       = e.target.closest('.bookmark-card-new, .bookmark-row, .vg-row, .vc-chapter');
 
       card.classList.add('deleting');
       await new Promise(r => setTimeout(r, 300));

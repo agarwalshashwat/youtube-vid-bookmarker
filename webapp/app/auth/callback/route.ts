@@ -24,12 +24,19 @@ export async function GET(request: NextRequest) {
 
     if (!error && data.session) {
       if (extensionId) {
-        // Redirect to extension-success page so client JS can send token to extension
+        // Fetch pro status to pass to extension
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_pro')
+          .eq('id', data.session.user.id)
+          .single();
+
         const p = new URLSearchParams({
           access_token:  data.session.access_token,
           refresh_token: data.session.refresh_token,
           user_id:       data.session.user.id,
           user_email:    data.session.user.email || '',
+          is_pro:        String(profile?.is_pro ?? false),
           extensionId,
         });
         return NextResponse.redirect(`${origin}/auth/extension-success?${p.toString()}`);

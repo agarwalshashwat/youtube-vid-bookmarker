@@ -182,9 +182,28 @@ async function saveBookmark(bookmark) {
     }
 
     const videoTitles = await getVideoTitles();
-    const tags  = parseTags(bookmark.description);
+
+    // Auto-fill description from transcript when user left it empty
+    let description = bookmark.description.trim();
+    if (!description) {
+      try {
+        const txRes = await sendMessageToTab(tab.id, {
+          action: 'getTranscriptAtTimestamp',
+          timestamp: bookmark.timestamp,
+        });
+        if (txRes?.text) description = txRes.text;
+      } catch {}
+      if (!description) {
+        try {
+          const chRes = await sendMessageToTab(tab.id, { action: 'getCurrentChapter' });
+          if (chRes?.chapter) description = chRes.chapter;
+        } catch {}
+      }
+      if (!description) description = `Bookmark at ${formatTimestamp(bookmark.timestamp)}`;
+    }
+
+    const tags  = parseTags(description);
     const color = getTagColor(tags);
-    const description = bookmark.description.trim() || `Bookmark at ${formatTimestamp(bookmark.timestamp)}`;
 
     const bookmarks = await getVideoBookmarks(bookmark.videoId);
     bookmarks.push({
@@ -192,13 +211,18 @@ async function saveBookmark(bookmark) {
       description,
       tags,
       color,
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
-      videoTitle: videoTitles[bookmark.videoId] || null,
+      id:             Date.now(),
+      createdAt:      new Date().toISOString(),
+      videoTitle:     videoTitles[bookmark.videoId] || null,
+      reviewSchedule: [1, 3, 7],
+      lastReviewed:   null,
     });
 
     await saveVideoBookmarks(bookmark.videoId, bookmarks);
     debugLog('Bookmarks', 'Saved bookmark', { description, tags });
+
+    // Visual feedback on the video player
+    sendMessageToTab(tab.id, { action: 'showSaveFlash' }).catch(() => {});
 
     document.getElementById('description').value = '';
     document.getElementById('tag-suggestions').style.display = 'none';
@@ -245,6 +269,16 @@ async function updateBookmarkDescription(videoId, bookmarkId, newDescription) {
   }
 }
 
+// ─── Pro / Paywall helpers ────────────────────────────────────────────────────
+async function checkPro() {
+  const { bmUser } = await syncGet({ bmUser: null });
+  return bmUser?.isPro === true;
+}
+
+function showUpgradePrompt(feature) {
+  showError(`✦ ${feature} is a Pro feature. Upgrade to Clipmark Pro to unlock AI-powered tools.`, 4000);
+}
+
 // ─── Smart Tag Suggestions ────────────────────────────────────────────────────
 async function suggestTags(description, transcript) {
   const suggestionsEl = document.getElementById('tag-suggestions');
@@ -252,6 +286,10 @@ async function suggestTags(description, transcript) {
     suggestionsEl.style.display = 'none';
     return;
   }
+
+  // Pro-only feature — silently skip so it doesn't disrupt the auto-fill flow
+  const isPro = await checkPro();
+  if (!isPro) return;
 
   try {
     const response = await fetch(`${API_BASE}/api/suggest-tags`, {
@@ -304,6 +342,10 @@ async function summarizeBookmarks() {
     panel.style.display = 'none';
     return;
   }
+
+  // Pro-only feature
+  const isPro = await checkPro();
+  if (!isPro) { showUpgradePrompt('AI Summary'); return; }
 
   try {
     const tab = await getCurrentTab();
@@ -364,6 +406,67 @@ async function summarizeBookmarks() {
   }
 }
 
+// ─── Social Post Generation ────────────────────────────────────────────────────
+async function generateSocialPost(platform, shareUrl) {
+  const outputEl     = document.getElementById('social-output');
+  const textareaEl   = document.getElementById('social-post-text');
+  const openLink     = document.getElementById('social-open-link');
+  const platformBtns = document.querySelectorAll('.social-platform-btn');
+
+  platformBtns.forEach(b => {
+    b.disabled = true;
+    b.classList.toggle('active', b.dataset.platform === platform);
+  });
+
+  outputEl.style.display = 'none';
+
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) throw new Error('Open a YouTube video first');
+
+    const videoId    = extractVideoId(tab.url);
+    const bookmarks  = await getVideoBookmarks(videoId);
+    if (bookmarks.length === 0) throw new Error('No bookmarks to share');
+
+    const videoTitles = await getVideoTitles();
+
+    const response = await fetch(`${API_BASE}/api/generate-post`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookmarks,
+        videoTitle: videoTitles[videoId] || '',
+        shareUrl:   shareUrl || '',
+        platform,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Server error');
+    }
+
+    const { post } = await response.json();
+    textareaEl.value = post;
+
+    // Deep-link to platform compose
+    const encoded = encodeURIComponent(post);
+    const composeUrls = {
+      twitter:  `https://twitter.com/intent/tweet?text=${encoded}`,
+      linkedin: `https://www.linkedin.com/feed/?shareActive=true&text=${encoded}`,
+      threads:  `https://www.threads.net/intent/post?text=${encoded}`,
+    };
+    openLink.href        = composeUrls[platform] || '#';
+    openLink.textContent = `Open ${platform.charAt(0).toUpperCase() + platform.slice(1)} ↗`;
+
+    outputEl.style.display = 'block';
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    platformBtns.forEach(b => { b.disabled = false; });
+  }
+}
+
 // ─── Share ────────────────────────────────────────────────────────────────────
 async function shareBookmarks() {
   const btn = document.getElementById('share-btn');
@@ -412,12 +515,80 @@ async function shareBookmarks() {
       btn.classList.remove('share-btn--copied');
       btn.disabled = false;
     }, 2500);
+
+    return shareUrl;
   } catch (error) {
     debugLog('Error', 'Share failed', { error: error.message });
     showError(error.message);
     btn.textContent = '↗ Share';
     btn.disabled = false;
+    return null;
   }
+}
+
+// ─── Spaced Revision ──────────────────────────────────────────────────────────
+function isDueForReview(bookmark) {
+  if (!bookmark.reviewSchedule?.length || !bookmark.createdAt) return false;
+  const created     = new Date(bookmark.createdAt).getTime();
+  const now         = Date.now();
+  const lastReviewed = bookmark.lastReviewed ? new Date(bookmark.lastReviewed).getTime() : 0;
+  return bookmark.reviewSchedule.some(days => {
+    const dueAt = created + days * 86400000;
+    return now >= dueAt && lastReviewed < dueAt;
+  });
+}
+
+async function markReviewed(videoId, bookmarkId) {
+  const bookmarks = await getVideoBookmarks(videoId);
+  const updated   = bookmarks.map(b =>
+    b.id === bookmarkId ? { ...b, lastReviewed: new Date().toISOString() } : b
+  );
+  await saveVideoBookmarks(videoId, updated);
+}
+
+async function loadSpacedRevision() {
+  const section = document.getElementById('revision-today');
+  if (!section) return;
+
+  const allData = await new Promise(resolve => chrome.storage.sync.get(null, resolve));
+  const due = [];
+  for (const [key, val] of Object.entries(allData)) {
+    if (key.startsWith('bm_') && Array.isArray(val)) {
+      val.forEach(b => { if (isDueForReview(b)) due.push(b); });
+    }
+  }
+
+  if (due.length === 0) { section.style.display = 'none'; return; }
+
+  section.style.display = 'block';
+  section.innerHTML = `
+    <div class="revision-today-header">
+      <span class="revision-today-title">📚 Revision Today</span>
+      <span class="revision-today-count">${due.length}</span>
+    </div>
+    <div class="revision-today-list">
+      ${due.slice(0, 5).map(b => `
+        <div class="revision-item" data-video-id="${b.videoId}" data-timestamp="${b.timestamp}" data-id="${b.id}">
+          <span class="revision-ts">${formatTimestamp(b.timestamp)}</span>
+          <span class="revision-desc">${b.description || 'No note'}</span>
+        </div>
+      `).join('')}
+      ${due.length > 5 ? `<div class="revision-more">+${due.length - 5} more in dashboard</div>` : ''}
+    </div>
+  `;
+
+  section.querySelectorAll('.revision-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      const { videoId, timestamp, id } = el.dataset;
+      await markReviewed(videoId, parseInt(id));
+      const tab = await getCurrentTab();
+      if (tab?.url?.includes(`youtube.com/watch?v=${videoId}`)) {
+        await handleBookmarkClick(tab, timestamp);
+      } else {
+        chrome.tabs.create({ url: `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(parseFloat(timestamp))}` });
+      }
+    });
+  });
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -454,6 +625,7 @@ async function loadBookmarks() {
     const videoTitles = await getVideoTitles();
     const titleEl = document.querySelector('#video-title span');
     if (titleEl && videoTitles[videoId]) {
+      titleEl.className = '';
       titleEl.textContent = videoTitles[videoId];
     }
 
@@ -602,6 +774,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (tab) await migrateToSync(tab.id).catch(() => {});
 
   loadBookmarks();
+  loadSpacedRevision();
 
   // Pre-warm transcript cache while the popup is loading
   getCurrentTab().then(t => {
@@ -617,12 +790,62 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (area === 'sync' && changes.bmUser) loadAuthState();
   });
 
+  // Quick tag chips
+  const descInput = document.getElementById('description');
+  document.querySelectorAll('.quick-tag-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tag = btn.dataset.tag;
+      const current = descInput.value.trim();
+      const alreadyHas = new RegExp(`#${tag}\\b`).test(current);
+      if (!alreadyHas) {
+        descInput.value = current ? `${current} #${tag}` : `#${tag}`;
+      }
+      descInput.focus();
+    });
+  });
+
   document.getElementById('summarize-btn').addEventListener('click', summarizeBookmarks);
   document.getElementById('summary-close').addEventListener('click', () => {
     document.getElementById('summary-panel').style.display = 'none';
   });
 
-  document.getElementById('share-btn').addEventListener('click', shareBookmarks);
+  // Social post panel
+  let lastShareUrl = null;
+
+  document.getElementById('post-btn').addEventListener('click', async () => {
+    const panel = document.getElementById('social-panel');
+    if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+
+    // Pro gate
+    const isPro = await checkPro();
+    if (!isPro) { showUpgradePrompt('Post Insights'); return; }
+
+    // Reset output pane
+    document.getElementById('social-output').style.display = 'none';
+    document.querySelectorAll('.social-platform-btn').forEach(b => b.classList.remove('active'));
+    panel.style.display = 'block';
+  });
+
+  document.getElementById('social-close').addEventListener('click', () => {
+    document.getElementById('social-panel').style.display = 'none';
+  });
+
+  document.querySelectorAll('.social-platform-btn').forEach(btn => {
+    btn.addEventListener('click', () => generateSocialPost(btn.dataset.platform, lastShareUrl));
+  });
+
+  document.getElementById('social-copy-btn').addEventListener('click', async () => {
+    const text = document.getElementById('social-post-text').value;
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('social-copy-btn');
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
+  });
+
+  document.getElementById('share-btn').addEventListener('click', async () => {
+    const url = await shareBookmarks();
+    if (url) lastShareUrl = url;
+  });
 
   document.getElementById('signin-btn').addEventListener('click', async () => {
     const tab = await getCurrentTab().catch(() => null);

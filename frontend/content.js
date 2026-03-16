@@ -13,6 +13,9 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY = 1000;
 
+// ─── Revision mode state ──────────────────────────────────────────────────────
+let revisionState = null; // { segments, index, countdownTimer }
+
 let titleSaveTimer = null;
 const savedTitlesCache = {}; // avoid redundant sync writes
 
@@ -30,8 +33,6 @@ const TAG_COLORS = {
   todo:      '#da77f2',
   key:       '#f783ac',
 };
-
-function bmKey(videoId) { return `bm_${videoId}`; }
 
 function parseTags(description) {
   if (!description) return [];
@@ -53,6 +54,14 @@ function getTagColor(tags) {
 }
 
 function bmKey(videoId) { return `bm_${videoId}`; }
+
+// ─── Extension context guard ──────────────────────────────────────────────────
+// After an extension reload/update the content script keeps running but
+// chrome.storage / chrome.runtime calls throw "Extension context invalidated".
+// Call this before any Chrome API usage in observer/timer callbacks.
+function isContextValid() {
+  try { return !!chrome.runtime?.id; } catch { return false; }
+}
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
 function formatTimestamp(seconds) {
@@ -100,6 +109,15 @@ function setupBookmarkMarkers() {
 
   // Pre-warm transcript cache now that the player is ready
   fetchTranscript().catch(() => {});
+
+  // Check if dashboard requested revision mode for this video
+  const currentVideoId = new URLSearchParams(window.location.search).get('v');
+  chrome.storage.local.get({ pendingRevision: null }, r => {
+    if (r.pendingRevision?.videoId === currentVideoId && r.pendingRevision.bookmarks?.length) {
+      chrome.storage.local.remove('pendingRevision');
+      setTimeout(() => startRevisionMode(r.pendingRevision.bookmarks), 800);
+    }
+  });
 
   video.addEventListener('durationchange', () => {
     debugLog('Video', 'Duration changed', { duration: video.duration });
@@ -161,6 +179,7 @@ function clusterBookmarks(bookmarks, duration) {
 
 // ─── Render markers ───────────────────────────────────────────────────────────
 function updateBookmarkMarkers() {
+  if (!isContextValid()) return;
   video = document.querySelector('video') || video;
   if (!video || !progressBar) return;
 
@@ -321,6 +340,7 @@ function getCurrentChapter() {
 
 // ─── Silent save (Alt+S) ──────────────────────────────────────────────────────
 async function silentSaveBookmark() {
+  if (!isContextValid()) return;
   video = document.querySelector('video') || video;
   if (!video) { debugLog('Silent', 'No video element'); return; }
 
@@ -351,8 +371,10 @@ async function silentSaveBookmark() {
       description,
       tags,
       color,
-      createdAt:  new Date().toISOString(),
-      videoTitle: videoTitles[videoId] || null,
+      createdAt:      new Date().toISOString(),
+      videoTitle:     videoTitles[videoId] || null,
+      reviewSchedule: [1, 3, 7],
+      lastReviewed:   null,
     });
 
     await new Promise((resolve, reject) =>
@@ -363,6 +385,7 @@ async function silentSaveBookmark() {
     );
 
     updateBookmarkMarkers();
+    showSaveFlash();
     showSilentSaveIndicator(description);
     const playerBtn = document.querySelector('.yt-bookmark-player-btn');
     if (playerBtn) { playerBtn.classList.add('saving'); setTimeout(() => playerBtn.classList.remove('saving'), 400); }
@@ -370,6 +393,44 @@ async function silentSaveBookmark() {
   } catch (error) {
     debugLog('Silent', 'Failed', { error: error.message });
   }
+}
+
+// ─── Save flash (sparkle screenshot effect) ────────────────────────────────────
+function showSaveFlash() {
+  const player = document.querySelector('.html5-video-player') ||
+                 document.querySelector('#movie_player');
+  if (!player) return;
+
+  // Ensure player is positioned so absolute children work
+  if (getComputedStyle(player).position === 'static') {
+    player.style.position = 'relative';
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'yt-save-flash';
+
+  const colors = ['#14B8A6', '#5865f2', '#f59e0b', '#ff6b6b', '#22c55e', '#a78bfa'];
+  const count  = 10;
+  for (let i = 0; i < count; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'yt-save-sparkle';
+    const angle  = (i / count) * 360;
+    const dist   = 55 + Math.random() * 35;
+    const tx     = (Math.cos(angle * Math.PI / 180) * dist).toFixed(1);
+    const ty     = (Math.sin(angle * Math.PI / 180) * dist).toFixed(1);
+    dot.style.cssText = `
+      left: calc(50% - 3px);
+      top: calc(50% - 3px);
+      --tx: ${tx}px;
+      --ty: ${ty}px;
+      background: ${colors[i % colors.length]};
+      animation-delay: ${i * 25}ms;
+    `;
+    overlay.appendChild(dot);
+  }
+
+  player.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 750);
 }
 
 function showSilentSaveIndicator(message, type = 'success') {
@@ -406,6 +467,7 @@ function handleKeyboardShortcut(event) {
 function initializeMessageListener() {
   debugLog('Messaging', 'Setting up message listener');
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+    if (!isContextValid()) return;
     debugLog('Messaging', 'Received', { action: request.action });
 
     const handle = async () => {
@@ -442,6 +504,11 @@ function initializeMessageListener() {
         sendResponse({});
         return;
       }
+      if (request.action === 'showSaveFlash') {
+        showSaveFlash();
+        sendResponse({});
+        return;
+      }
       if (request.action === 'getTimestamp') {
         // Always query fresh — YouTube SPA may replace the video element
         const activeVideo = document.querySelector('video') || video;
@@ -475,6 +542,16 @@ function initializeMessageListener() {
         sendResponse({});
         return;
       }
+      if (request.action === 'startRevision') {
+        startRevisionMode(request.bookmarks);
+        sendResponse({});
+        return;
+      }
+      if (request.action === 'exitRevision') {
+        exitRevisionMode();
+        sendResponse({});
+        return;
+      }
       if (request.action === 'getTranscriptAtTimestamp') {
         const transcript = await fetchTranscript();
         const text       = getTextAtTimestamp(transcript, request.timestamp);
@@ -504,6 +581,7 @@ async function getVideoTitle() {
 }
 
 async function saveVideoTitle() {
+  if (!isContextValid()) return;
   const videoId = new URLSearchParams(window.location.search).get('v');
   if (!videoId) return;
   const title = await getVideoTitle();
@@ -637,6 +715,93 @@ function injectStyles() {
       font-size: 11px;
     }
 
+    /* Save flash overlay */
+    .yt-save-flash {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 999;
+      overflow: hidden;
+    }
+    .yt-save-flash::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.28);
+      animation: bm-screen-flash 0.55s ease forwards;
+    }
+    .yt-save-sparkle {
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      animation: bm-sparkle-out 0.65s ease forwards;
+    }
+    @keyframes bm-screen-flash {
+      0%   { opacity: 0; }
+      18%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes bm-sparkle-out {
+      0%   { transform: scale(0) translate(0, 0); opacity: 1; }
+      100% { transform: scale(1.4) translate(var(--tx), var(--ty)); opacity: 0; }
+    }
+
+    /* Revision mode overlay */
+    .yt-revision-overlay {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 999999;
+      background: rgba(15, 15, 15, 0.90);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 14px 18px 12px;
+      color: white;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-width: 190px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+    .yt-revision-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #14B8A6;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .yt-revision-clip {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .yt-revision-range {
+      font-size: 13px;
+      color: rgba(255,255,255,0.65);
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 6px;
+    }
+    .yt-revision-next {
+      font-size: 11px;
+      color: #fbbf24;
+      min-height: 16px;
+    }
+    .yt-revision-close {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.45);
+      font-size: 15px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      transition: color 0.12s;
+    }
+    .yt-revision-close:hover { color: white; }
+
     /* Player bookmark button */
     .yt-bookmark-player-btn {
       color: white;
@@ -665,6 +830,109 @@ function injectStyles() {
     }
   `;
   document.head.appendChild(style);
+}
+
+// ─── Revision mode ────────────────────────────────────────────────────────────
+function buildRevisionSegments(bookmarks) {
+  const sorted = [...bookmarks].sort((a, b) => a.timestamp - b.timestamp);
+  return sorted.map((b, i) => {
+    const next = sorted[i + 1];
+    const end  = next ? Math.min(next.timestamp, b.timestamp + 60) : b.timestamp + 60;
+    return { bookmark: b, start: b.timestamp, end };
+  });
+}
+
+function startRevisionMode(bookmarks) {
+  if (!bookmarks.length) return;
+  exitRevisionMode(); // clean up any prior session
+  revisionState = { segments: buildRevisionSegments(bookmarks), index: 0, countdownTimer: null };
+  playRevisionSegment(0);
+}
+
+function playRevisionSegment(index) {
+  const v = document.querySelector('video') || video;
+  if (!v || !revisionState) return;
+  const seg = revisionState.segments[index];
+  revisionState.index = index;
+  v.currentTime = seg.start;
+  v.play().catch(() => {});
+  updateRevisionOverlay();
+  v.addEventListener('timeupdate', revisionTimeUpdateHandler);
+}
+
+function revisionTimeUpdateHandler() {
+  const v = document.querySelector('video') || video;
+  if (!v || !revisionState) return;
+  const seg = revisionState.segments[revisionState.index];
+  if (v.currentTime >= seg.end) {
+    v.removeEventListener('timeupdate', revisionTimeUpdateHandler);
+    advanceRevision();
+  }
+}
+
+function advanceRevision() {
+  if (!revisionState) return;
+  const next = revisionState.index + 1;
+  if (next >= revisionState.segments.length) {
+    exitRevisionMode();
+    showSilentSaveIndicator('Revision complete ✓');
+    return;
+  }
+  let countdown = 3;
+  updateRevisionCountdown(countdown);
+  revisionState.countdownTimer = setInterval(() => {
+    countdown--;
+    if (countdown <= 0) {
+      clearInterval(revisionState.countdownTimer);
+      revisionState.countdownTimer = null;
+      playRevisionSegment(next);
+    } else {
+      updateRevisionCountdown(countdown);
+    }
+  }, 1000);
+}
+
+function exitRevisionMode() {
+  const v = document.querySelector('video') || video;
+  if (v) v.removeEventListener('timeupdate', revisionTimeUpdateHandler);
+  if (revisionState?.countdownTimer) clearInterval(revisionState.countdownTimer);
+  revisionState = null;
+  document.querySelector('.yt-revision-overlay')?.remove();
+}
+
+function ensureRevisionOverlay() {
+  let overlay = document.querySelector('.yt-revision-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'yt-revision-overlay';
+    overlay.innerHTML = `
+      <div class="yt-revision-label">🔖 Revision Mode</div>
+      <div class="yt-revision-clip"></div>
+      <div class="yt-revision-range"></div>
+      <div class="yt-revision-next"></div>
+      <button class="yt-revision-close">✕</button>
+    `;
+    overlay.querySelector('.yt-revision-close').addEventListener('click', exitRevisionMode);
+    document.body.appendChild(overlay);
+  }
+  return overlay;
+}
+
+function updateRevisionOverlay() {
+  if (!revisionState) return;
+  const overlay  = ensureRevisionOverlay();
+  const seg      = revisionState.segments[revisionState.index];
+  const current  = revisionState.index + 1;
+  const total    = revisionState.segments.length;
+  overlay.querySelector('.yt-revision-clip').textContent  = `Clip ${current} / ${total}`;
+  overlay.querySelector('.yt-revision-range').textContent =
+    `${formatTimestamp(seg.start)} → ${formatTimestamp(seg.end)}`;
+  overlay.querySelector('.yt-revision-next').textContent  = '';
+}
+
+function updateRevisionCountdown(sec) {
+  const el = document.querySelector('.yt-revision-next');
+  if (el) el.textContent = `Next clip in ${sec}s`;
 }
 
 // ─── Initialize ───────────────────────────────────────────────────────────────
@@ -710,6 +978,7 @@ window.addEventListener('pagehide', () => {
   debugLog('Cleanup', 'Performing cleanup');
   document.removeEventListener('keydown', handleKeyboardShortcut);
   if (video) video.removeEventListener('durationchange', updateBookmarkMarkers);
+  exitRevisionMode();
   isInitialized       = false;
   reconnectAttempts   = 0;
   cachedTranscript    = null;

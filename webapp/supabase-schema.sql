@@ -88,3 +88,9 @@ CREATE POLICY "Users can update own bookmarks"
 
 CREATE POLICY "Users can delete own bookmarks"
   ON public.user_bookmarks FOR DELETE USING (auth.uid() = user_id);
+
+-- ─── Paywall: Pro tier flag ───────────────────────────────────────────────────
+-- Run this if profiles table already exists (migration):
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_pro BOOLEAN DEFAULT false;
+
+-- Admin can flip is_pro manually via Supabase dashboard or a future billing webhook.

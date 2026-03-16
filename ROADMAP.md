@@ -14,6 +14,8 @@
 | Platforms | YouTube only, Chrome only |
 | Users | Accounts via Google OAuth · public shareable pages · public profiles |
 | Live at | https://clipmark-chi.vercel.app |
+| AI | Claude Haiku — transcript auto-fill, summaries, tag suggestions, social posts |
+| Learning | Revision Mode (sequential clip playback) + Spaced Revision (1/3/7-day schedule) |
 
 ---
 
@@ -69,6 +71,7 @@
 - [x] **Marker clustering** — when >8 bookmarks on a video, nearby markers (within 0.8% of duration) merge into a wider cluster marker with multi-line tooltip
 - [ ] **Google Drive backup** — optional "Back up to Google Drive" using Google Picker API *(deferred — needs OAuth)*
 - [x] **YouTube player bookmark button** *(bonus)* — bookmark icon injected into `.ytp-right-controls`, pulse animation on save; same as `Alt+S`
+- [x] **Visual save flash** — sparkle/screenshot-style overlay on the video player frame on every save (player button, Alt+S, popup save); radiating colored dots + white flash for ~700ms
 
 ---
 
@@ -97,13 +100,20 @@
 - [ ] Real-time sync (Supabase Realtime)
 - [ ] Use cases: design reviews, QA on recorded sessions, team training
 
+### 3.5 Social Sharing ✅ Done
+- [x] **"✍ Post" button** in popup header (Pro-only) — opens platform chooser panel
+- [x] **Platform targets**: X/Twitter, LinkedIn, Threads — each with tuned character limits and tone
+- [x] **AI-generated post copy** — `POST /api/generate-post` uses `claude-haiku-4-5` to write platform-appropriate captions with key bookmark insights + share URL
+- [x] **One-click open** — deep-links to platform compose URL pre-filled with generated text and Clipmark share link
+- [x] Use case: researcher/creator bookmarks key insights → one tap → polished LinkedIn or X post ready to publish
+
 ### 3.4 Embed Widget ✅ Done
 - [x] `<iframe>`-friendly page at `bookmarker.app/embed/[shareId]` — compact layout with bookmark list, Watch link, powered-by footer
 - [x] `next.config.mjs` sets `X-Frame-Options: ALLOWALL` and `Content-Security-Policy: frame-ancestors *` for `/embed/*`
 
 ---
 
-## Phase 4 — AI Features ✅ Mostly done
+## Phase 4 — AI Features ✅ Done
 
 > Goal: Make the product intelligent — move from "manual notes" to "smart notes".
 
@@ -114,6 +124,7 @@
 - [x] **"✦ Auto" button** in popup pre-fills description field; user edits or accepts
 - [x] **Alt+S silent save** now uses transcript text instead of generic "Bookmark at M:SS"
 - [x] Transcript is cached per-video; cache invalidates automatically on SPA navigation
+- [x] **Auto-transcript on all empty saves** — popup Save button with blank description now fetches transcript snippet → chapter title → "Bookmark at M:SS" fallback, same chain as Alt+S
 
 ### 4.2 AI Summary of Bookmarks ✅ Done
 - [x] **"✦ Summary" button** in popup header — sends bookmarks to `POST /api/summarize`
@@ -127,7 +138,17 @@
 - [x] Prefers named tags (important, review, note, question, todo, key); falls back to custom tags
 - [ ] Cluster bookmarks by topic across multiple videos *(future)*
 
-### 4.4 Semantic Search
+### 4.4 Revision & Learning ✅ Done
+- [x] **Revision Mode** — "▶ Revision" button on each video card in the dashboard
+- [x] Stores `pendingRevision` in `chrome.storage.local`; content script picks it up when the YouTube tab loads
+- [x] Builds a segment queue: each clip plays from `bookmark.timestamp` to `min(nextBookmark, start+60)`
+- [x] `timeupdate` listener auto-advances; 3-second countdown overlay between clips
+- [x] HUD overlay: "🔖 Revision Mode · Clip N / N · M:SS → M:SS · Next clip in Xs" with ✕ exit button
+- [x] **Spaced Revision** — new bookmarks store `reviewSchedule: [1, 3, 7]` (days) and `lastReviewed: null`
+- [x] Popup shows "📚 Revision Today (N)" panel when any bookmarks are due for review
+- [x] Clicking a due item marks it reviewed and navigates to the timestamp
+
+### 4.5 Semantic Search
 - [ ] "Find all bookmarks where they mention authentication"
 - [ ] Full-text + semantic search across all bookmark descriptions and transcript context
 
@@ -194,27 +215,96 @@ DONE
   ✅ Phase 4.2  AI summary panel in popup (Claude Haiku)
   ✅ Phase 4.3  Smart tag suggestions after auto-fill
 
+  ✅ Phase 2   Visual save flash + auto-transcript on all empty saves
+  ✅ Phase 3.5 Social sharing — AI post generation for X/LinkedIn/Threads (Pro)
+  ✅ Paywall   Pro flag (is_pro) on profiles; AI Summary, Tags, Social all Pro-gated
+  ✅ Phase 4.4 Revision Mode — sequential clip playback with HUD overlay
+  ✅ Phase 4.4 Spaced Revision — reviewSchedule + "Revision Today" popup panel
+
 NEXT  (go live)
-  → Deploy webapp to Vercel + point API_BASE at production URL
-  → Run Supabase migration for user_bookmarks table (Phase 3.2 schema)
-  → Add ANTHROPIC_API_KEY to Vercel env vars (Phase 4.2/4.3)
+  → Run Supabase migration: ALTER TABLE profiles ADD COLUMN is_pro BOOLEAN DEFAULT false
+  → Deploy webapp to Vercel (triggers on push to main under webapp/ root directory)
+  → Confirm ANTHROPIC_API_KEY + NEXT_PUBLIC_APP_URL set in Vercel env vars
 
 LATER  (monetize)
-  → Phase 4.4  Semantic search across bookmarks
-  → Phase 3.3      Teams / collaboration
-  → Phase 5        Multi-platform + multi-browser
-  → Phase 6        Integrations
+  → Phase 4.4 Semantic search across bookmarks
+  → Phase 3.3 Teams / collaboration
+  → Phase 5   Multi-platform + multi-browser
+  → Phase 6   Integrations
 ```
 
 ---
 
-## Target Users
+## Product Positioning
 
-| Segment | Use Case |
-|---------|----------|
-| Students | Bookmark lecture moments to review before exams |
-| Researchers | Mark evidence clips in documentaries and interviews |
-| Developers | Save progress in long tutorial series |
-| Content creators | Reference and annotate competitor content |
-| Teams | Collaborative review of recorded meetings, design walkthroughs, QA sessions |
-| Course creators | Build shareable chapter guides for their videos |
+> **Turn long YouTube videos into searchable, revisable knowledge.**
+
+Videos are long. The knowledge inside them is not searchable or revisable by default.
+Clipmark solves this by turning passive watching into structured, replayable notes.
+
+---
+
+## Primary Personas (Focus Here First)
+
+These three groups already watch a lot of long-form video. They feel the pain most acutely.
+
+### 1. Developers — Interview & Tutorial Recap
+**Core problem:** A 2-hour system design lecture is too long to re-watch the night before an interview.
+
+**With Clipmark:**
+- Bookmark key concepts as they watch (`#interview`, `#design`, `#backend`)
+- Open Revision Mode the night before → plays only the bookmarked clips
+- `2 hours → 6 minutes` of targeted review
+
+**Features that serve this:** Revision Mode, Spaced Revision, tags, AI auto-fill from transcript
+
+---
+
+### 2. Students — Lecture Revision & Exam Prep
+**Core problem:** A 1.5-hour physics lecture has 20 minutes of actually examinable content scattered throughout.
+
+**With Clipmark:**
+- Bookmark the important moments (`#concept`, `#example`, `#formula`)
+- Revision Mode plays only those clips before the exam
+- Spaced Revision resurfaces bookmarks 1, 3, and 7 days later — like flashcards for video
+
+**Features that serve this:** Revision Mode, Spaced Revision, AI summary, tags
+
+---
+
+### 3. Tech Creators — Content Summaries & Posts
+**Core problem:** Watching a 3-hour podcast to extract 5 usable insights takes all day and produces nothing shareable.
+
+**With Clipmark:**
+- Bookmark key quotes and moments as they watch (`#quote`, `#insight`, `#important`)
+- Hit **✍ Post** → AI generates a LinkedIn post, X thread, or Threads caption with a share link attached
+- One bookmark session becomes a published post, a newsletter section, and a shareable guide
+
+**Features that serve this:** Social Post Generation (Pro), AI Summary (Pro), Share Pages, Embed Widget
+
+---
+
+## Secondary Personas (Support, Don't Prioritize)
+
+| Segment | Core Use Case | Key Features |
+|---------|--------------|--------------|
+| Researchers | Bookmark evidence in documentaries and interviews; export to Notion/Obsidian for papers | Markdown/CSV export, tags, share pages |
+| Course creators | Build shareable chapter guides for their own course videos | Share pages (`/v/{shareId}`), embed widget (`/embed/{shareId}`) |
+| Teams *(future)* | Collaborative annotation of recorded meetings and design walkthroughs | Phase 3.3 — not yet built |
+
+---
+
+## Suggested Tag Vocabulary
+
+These tags make bookmarks self-organising across all personas:
+
+| Tag | Meaning |
+|-----|---------|
+| `#concept` | A definition or core idea |
+| `#example` | A worked example or demo |
+| `#interview` | Interview prep content |
+| `#revision` | Worth revisiting before an exam or presentation |
+| `#quote` | A quotable moment (creator use case) |
+| `#insight` | A key takeaway |
+| `#important` | General high-value moment |
+| `#formula` | Mathematical or algorithmic derivation |

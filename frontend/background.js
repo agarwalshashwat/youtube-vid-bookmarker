@@ -124,6 +124,7 @@ chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) =>
         userEmail:    message.userEmail,
         accessToken:  message.accessToken,
         refreshToken: message.refreshToken,
+        isPro:        message.isPro || false,
       }
     }, () => {
       sendResponse({ ok: true });

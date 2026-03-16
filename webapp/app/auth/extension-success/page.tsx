@@ -14,6 +14,7 @@ function ExtensionSuccessInner() {
     const refreshToken = params.get('refresh_token');
     const userId       = params.get('user_id');
     const userEmail    = params.get('user_email');
+    const isPro        = params.get('is_pro') === 'true';
 
     if (!extensionId || !accessToken) { setStatus('error'); return; }
 
@@ -21,7 +22,7 @@ function ExtensionSuccessInner() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cr = (window as any).chrome?.runtime;
       if (cr?.sendMessage) {
-        cr.sendMessage(extensionId, { type: 'AUTH_SUCCESS', accessToken, refreshToken, userId, userEmail });
+        cr.sendMessage(extensionId, { type: 'AUTH_SUCCESS', accessToken, refreshToken, userId, userEmail, isPro });
       }
       setStatus('done');
       setTimeout(() => window.close(), 1800);
