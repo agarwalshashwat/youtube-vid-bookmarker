@@ -1,6 +1,6 @@
 // ─── API config ──────────────────────────────────────────────────────────────
 // Change to 'https://bookmarker.app' after deploying the webapp
-const API_BASE = 'http://localhost:3000';
+const API_BASE = 'https://clipmark-chi.vercel.app';
 
 // ─── Tag colours ────────────────────────────────────────────────────────────
 const TAG_COLORS = {
