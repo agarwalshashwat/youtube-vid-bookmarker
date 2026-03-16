@@ -1,216 +1,545 @@
-// Debug logging function
+// ─── Debug ────────────────────────────────────────────────────────────────────
 function debugLog(category, message, data = null) {
-  const timestamp = new Date().toISOString();
-  const logMessage = `[ContentScript][${category}][${timestamp}] ${message}`;
-  console.log(logMessage, data ? data : '');
+  console.log(`[ContentScript][${category}][${new Date().toISOString()}] ${message}`, data ?? '');
 }
 
-// Content script initialization
 debugLog('Init', 'Content script loading');
 
+// ─── State ────────────────────────────────────────────────────────────────────
 let video = null;
 let progressBar = null;
-const KEYBOARD_SHORTCUT = 'Alt+B';
-
 let isInitialized = false;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY = 1000;
 
-// Notify that content script is ready
-chrome.runtime.sendMessage({ action: "contentScriptReady" }, response => {
-  debugLog('Init', 'Sent contentScriptReady message', response);
-});
+let titleSaveTimer = null;
+const savedTitlesCache = {}; // avoid redundant sync writes
 
-// Initialize video element and progress bar observer
+// ─── Transcript state ─────────────────────────────────────────────────────────
+let cachedTranscript       = null; // null = not fetched yet, [] = fetched but empty
+let transcriptFetchPromise = null;
+let cachedTranscriptVideoId = null;
+
+// ─── Tag colours (must match popup.js) ───────────────────────────────────────
+const TAG_COLORS = {
+  important: '#ff6b6b',
+  review:    '#ffa94d',
+  note:      '#74c0fc',
+  question:  '#a9e34b',
+  todo:      '#da77f2',
+  key:       '#f783ac',
+};
+
+function bmKey(videoId) { return `bm_${videoId}`; }
+
+function parseTags(description) {
+  if (!description) return [];
+  const matches = description.match(/#(\w+)/g);
+  return matches ? matches.map(t => t.slice(1).toLowerCase()) : [];
+}
+
+function stringToColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return `hsl(${Math.abs(hash) % 360}, 60%, 60%)`;
+}
+
+function getTagColor(tags) {
+  if (!tags || tags.length === 0) return '#4da1ee';
+  return TAG_COLORS[tags[0]] || stringToColor(tags[0]);
+}
+
+function bmKey(videoId) { return `bm_${videoId}`; }
+
+// ─── Format helpers ───────────────────────────────────────────────────────────
+function formatTimestamp(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// ─── Video observer ───────────────────────────────────────────────────────────
 function initializeVideoObserver() {
   debugLog('Observer', 'Setting up video observer');
   const observer = new MutationObserver(() => {
     if (!video) {
       video = document.querySelector('video');
       if (video) {
-        debugLog('Video', 'Video element found and initialized', { duration: video.duration });
+        debugLog('Video', 'Video element found', { duration: video.duration });
         initializeProgressBar();
       }
     }
   });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// Initialize progress bar and set up markers container
+// ─── Progress bar ─────────────────────────────────────────────────────────────
 function initializeProgressBar() {
   debugLog('ProgressBar', 'Setting up progress bar observer');
-  const progressBarObserver = new MutationObserver(() => {
+  const observer = new MutationObserver(() => {
     progressBar = document.querySelector('.ytp-progress-bar');
     if (progressBar && !document.querySelector('.yt-bookmark-markers')) {
       debugLog('ProgressBar', 'Progress bar found, setting up markers');
       setupBookmarkMarkers();
     }
   });
-
-  progressBarObserver.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// Set up bookmark markers container
 function setupBookmarkMarkers() {
   debugLog('Markers', 'Creating markers container');
-  const markersContainer = document.createElement('div');
-  markersContainer.className = 'yt-bookmark-markers';
-  markersContainer.style.cssText = `
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 1;
-  `;
-  progressBar.appendChild(markersContainer);
+  const container = document.createElement('div');
+  container.className = 'yt-bookmark-markers';
+  container.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;';
+  progressBar.appendChild(container);
   updateBookmarkMarkers();
+  setupPlayerBookmarkButton();
+
+  // Pre-warm transcript cache now that the player is ready
+  fetchTranscript().catch(() => {});
 
   video.addEventListener('durationchange', () => {
-    debugLog('Video', 'Duration changed', { newDuration: video.duration });
+    debugLog('Video', 'Duration changed', { duration: video.duration });
     updateBookmarkMarkers();
   });
 }
 
-// Update bookmark markers on the progress bar
-function updateBookmarkMarkers() {
-  if (!video || !progressBar) {
-    debugLog('Markers', 'Cannot update markers - missing video or progress bar');
-    return;
+// ─── Player bookmark button ───────────────────────────────────────────────────
+function setupPlayerBookmarkButton() {
+  if (document.querySelector('.yt-bookmark-player-btn')) return;
+
+  const controls = document.querySelector('.ytp-right-controls');
+  if (!controls) return;
+
+  const btn = document.createElement('button');
+  btn.className  = 'ytp-button yt-bookmark-player-btn';
+  btn.title      = 'Bookmark this moment (Alt+S)';
+  btn.innerHTML  = `<svg viewBox="0 0 24 24" width="24" height="24" focusable="false">
+    <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z" fill="currentColor"/>
+  </svg>`;
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    silentSaveBookmark();
+  });
+
+  // Insert before the first button in right-controls (settings gear or similar)
+  controls.insertBefore(btn, controls.firstChild);
+  debugLog('PlayerBtn', 'Bookmark button injected');
+}
+
+// ─── Marker clustering ────────────────────────────────────────────────────────
+function clusterBookmarks(bookmarks, duration) {
+  if (bookmarks.length <= 8 || !duration) return bookmarks.map(b => ({ ...b, isCluster: false }));
+
+  const sorted    = [...bookmarks].sort((a, b) => a.timestamp - b.timestamp);
+  const threshold = duration * 0.008; // 0.8% of video duration
+  const result    = [];
+  let i = 0;
+
+  while (i < sorted.length) {
+    const group = [sorted[i]];
+    let j = i + 1;
+    while (j < sorted.length && sorted[j].timestamp - sorted[i].timestamp < threshold) {
+      group.push(sorted[j]);
+      j++;
+    }
+    if (group.length === 1) {
+      result.push({ ...group[0], isCluster: false });
+    } else {
+      const mid   = group[Math.floor(group.length / 2)];
+      const label = `×${group.length}: ` + group.map(b => `${formatTimestamp(b.timestamp)} — ${b.description || 'No description'}`).join(' | ');
+      result.push({ ...mid, isCluster: true, clusterCount: group.length, clusterLabel: label });
+    }
+    i = j;
   }
+  return result;
+}
+
+// ─── Render markers ───────────────────────────────────────────────────────────
+function updateBookmarkMarkers() {
+  video = document.querySelector('video') || video;
+  if (!video || !progressBar) return;
 
   const videoId = new URLSearchParams(window.location.search).get('v');
-  if (!videoId) {
-    debugLog('Markers', 'Cannot update markers - no video ID found');
-    return;
-  }
+  if (!videoId) return;
 
-  debugLog('Storage', 'Fetching bookmarks from storage');
-  chrome.storage.local.get({ bookmarks: [] }, (result) => {
-    const markersContainer = document.querySelector('.yt-bookmark-markers');
-    if (!markersContainer) {
-      debugLog('Markers', 'Cannot update markers - container not found');
-      return;
-    }
+  chrome.storage.sync.get({ [bmKey(videoId)]: [] }, result => {
+    const container = document.querySelector('.yt-bookmark-markers');
+    if (!container) return;
 
-    markersContainer.innerHTML = '';
-    const bookmarks = result.bookmarks.filter(b => b.videoId === videoId);
-    debugLog('Markers', 'Found bookmarks for video', { count: bookmarks.length, videoId });
+    container.innerHTML = '';
+    const bookmarks = result[bmKey(videoId)];
+    debugLog('Markers', 'Rendering markers', { count: bookmarks.length });
 
-    const videoDuration = video.duration;
-    bookmarks.forEach(bookmark => {
+    const duration = video.duration;
+    const items = clusterBookmarks(bookmarks, duration);
+    items.forEach(bookmark => {
+      const color = bookmark.color || getTagColor(bookmark.tags || []);
+
       const marker = document.createElement('div');
-      marker.className = 'yt-bookmark-marker';
+      marker.className = bookmark.isCluster ? 'yt-bookmark-marker yt-bookmark-cluster' : 'yt-bookmark-marker';
       marker.setAttribute('data-timestamp', bookmark.timestamp);
-      marker.setAttribute('data-description', 
-        `${formatTimestamp(bookmark.timestamp)} - ${bookmark.description || 'No description'}`);
-      
-      const position = (bookmark.timestamp / videoDuration) * 100;
-      marker.style.left = `${position}%`;
-      
-      marker.style.pointerEvents = 'auto';
+      marker.setAttribute('data-description', bookmark.isCluster
+        ? bookmark.clusterLabel
+        : `${formatTimestamp(bookmark.timestamp)} — ${bookmark.description || 'No description'}`);
+
+      marker.style.left            = `${(bookmark.timestamp / duration) * 100}%`;
+      marker.style.backgroundColor = color;
+      marker.style.boxShadow       = `0 0 4px ${color}80`;
+      marker.style.pointerEvents   = 'auto';
+      if (bookmark.isCluster) marker.style.width = '5px';
+
       marker.addEventListener('click', () => {
-        debugLog('Marker', 'Marker clicked', { timestamp: bookmark.timestamp });
+        debugLog('Marker', 'Clicked', { timestamp: bookmark.timestamp });
         marker.classList.add('clicked');
         video.currentTime = bookmark.timestamp;
-        // Remove the clicked class after animation
         setTimeout(() => marker.classList.remove('clicked'), 600);
       });
 
-      markersContainer.appendChild(marker);
+      container.appendChild(marker);
     });
   });
 }
 
-// Format timestamp for tooltips
-function formatTimestamp(seconds) {
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+// ─── Transcript ───────────────────────────────────────────────────────────────
+async function fetchTranscript() {
+  const videoId = new URLSearchParams(window.location.search).get('v');
+
+  // Invalidate cache when video changes (YouTube is a SPA)
+  if (videoId !== cachedTranscriptVideoId) {
+    cachedTranscript       = null;
+    transcriptFetchPromise = null;
+    cachedTranscriptVideoId = videoId;
+  }
+
+  if (cachedTranscript !== null) return cachedTranscript;
+  if (transcriptFetchPromise)    return transcriptFetchPromise;
+
+  transcriptFetchPromise = (async () => {
+    try {
+      const ytData = window.ytInitialPlayerResponse;
+      const tracks = ytData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+
+      if (!tracks) {
+        // ytInitialPlayerResponse not ready yet — don't cache, allow retry
+        debugLog('Transcript', 'Captions data not available yet, will retry on next call');
+        cachedTranscript = null;
+        transcriptFetchPromise = null;
+        return [];
+      }
+
+      if (tracks.length === 0) {
+        debugLog('Transcript', 'No caption tracks available for this video');
+        cachedTranscript = [];
+        return [];
+      }
+
+      // Prefer English auto-generated → English manual → any auto → first track
+      const track =
+        tracks.find(t => t.languageCode === 'en' && t.kind === 'asr') ||
+        tracks.find(t => t.languageCode === 'en') ||
+        tracks.find(t => t.kind === 'asr') ||
+        tracks[0];
+
+      if (!track?.baseUrl) {
+        cachedTranscript = [];
+        return [];
+      }
+
+      debugLog('Transcript', 'Fetching', { lang: track.languageCode, kind: track.kind });
+
+      const res = await fetch(`${track.baseUrl}&fmt=json3`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+
+      // YouTube json3 format: { events: [{ tStartMs, dDurationMs, segs: [{ utf8 }] }] }
+      const segments = (data.events || [])
+        .filter(e => e.segs && e.segs.length > 0)
+        .map(e => ({
+          start: e.tStartMs / 1000,
+          end:   (e.tStartMs + (e.dDurationMs || 0)) / 1000,
+          text:  e.segs.map(s => (s.utf8 || '').replace(/\n/g, ' ')).join('').trim(),
+        }))
+        .filter(s => s.text && s.text !== '\u200b');
+
+      cachedTranscript = segments;
+      debugLog('Transcript', `Loaded ${segments.length} segments`);
+      return segments;
+    } catch (error) {
+      debugLog('Transcript', 'Failed to fetch', { error: error.message });
+      cachedTranscript = [];
+      return [];
+    }
+  })();
+
+  return transcriptFetchPromise;
 }
 
-// Handle keyboard shortcuts
-function handleKeyboardShortcut(event) {
-  if (event.altKey && event.key.toLowerCase() === 'b') {
-    chrome.runtime.sendMessage({ action: "openPopup" });
+// Return cleaned transcript text for a ~5s window around the given timestamp
+function getTextAtTimestamp(transcript, timestamp) {
+  if (!transcript || transcript.length === 0) return null;
+
+  // 1s before bookmark → 4s after (captures what's being said at that moment)
+  const from = timestamp - 1;
+  const to   = timestamp + 4;
+
+  let hits = transcript.filter(s => s.start < to && s.end > from);
+
+  if (hits.length === 0) {
+    // Fallback: nearest segment by start time
+    hits = [transcript.reduce((best, s) =>
+      Math.abs(s.start - timestamp) < Math.abs(best.start - timestamp) ? s : best
+    )];
+  }
+
+  const combined = hits.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+  return cleanTranscriptText(combined);
+}
+
+function cleanTranscriptText(text) {
+  if (!text) return null;
+  let t = text.trim();
+  // Capitalize first letter
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  // Truncate at word boundary to ~120 chars
+  if (t.length > 120) {
+    t = t.substring(0, 120).replace(/\s+\S*$/, '') + '…';
+  }
+  return t || null;
+}
+
+// ─── Chapter detection ───────────────────────────────────────────────────────
+function getCurrentChapter() {
+  const el = document.querySelector('.ytp-chapter-title-content');
+  return el ? el.textContent.trim() || null : null;
+}
+
+// ─── Silent save (Alt+S) ──────────────────────────────────────────────────────
+async function silentSaveBookmark() {
+  video = document.querySelector('video') || video;
+  if (!video) { debugLog('Silent', 'No video element'); return; }
+
+  const videoId = new URLSearchParams(window.location.search).get('v');
+  if (!videoId) { debugLog('Silent', 'No video ID'); return; }
+
+  const timestamp = video.currentTime;
+  const tags      = [];
+  const color     = '#4da1ee';
+
+  // Try transcript first, fall back to "Bookmark at M:SS"
+  const transcript     = await fetchTranscript().catch(() => null);
+  const transcriptText = transcript ? getTextAtTimestamp(transcript, timestamp) : null;
+  const chapter     = getCurrentChapter();
+  const description = transcriptText || chapter || `Bookmark at ${formatTimestamp(timestamp)}`;
+
+  try {
+    const result = await new Promise(resolve =>
+      chrome.storage.sync.get({ [bmKey(videoId)]: [], videoTitles: {} }, resolve)
+    );
+    const bookmarks   = result[bmKey(videoId)];
+    const videoTitles = result.videoTitles;
+
+    bookmarks.push({
+      id: Date.now(),
+      videoId,
+      timestamp,
+      description,
+      tags,
+      color,
+      createdAt:  new Date().toISOString(),
+      videoTitle: videoTitles[videoId] || null,
+    });
+
+    await new Promise((resolve, reject) =>
+      chrome.storage.sync.set({ [bmKey(videoId)]: bookmarks }, () => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve();
+      })
+    );
+
+    updateBookmarkMarkers();
+    showSilentSaveIndicator(description);
+    const playerBtn = document.querySelector('.yt-bookmark-player-btn');
+    if (playerBtn) { playerBtn.classList.add('saving'); setTimeout(() => playerBtn.classList.remove('saving'), 400); }
+    debugLog('Silent', 'Saved silent bookmark', { timestamp, description });
+  } catch (error) {
+    debugLog('Silent', 'Failed', { error: error.message });
   }
 }
 
-// Initialize message listener for timestamp operations
+function showSilentSaveIndicator(message, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'yt-bookmark-toast';
+  el.textContent = message;
+  if (type === 'error') {
+    el.style.borderLeftColor = '#ef4444';
+  } else {
+    el.style.borderLeftColor = '#14B8A6';
+  }
+  document.body.appendChild(el);
+  // Trigger reflow for animation
+  el.getClientRects();
+  el.classList.add('yt-bookmark-toast--show');
+  setTimeout(() => {
+    el.classList.remove('yt-bookmark-toast--show');
+    setTimeout(() => el.remove(), 400);
+  }, 2000);
+}
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+function handleKeyboardShortcut(event) {
+  if (!event.altKey) return;
+  if (event.key.toLowerCase() === 'b') {
+    chrome.runtime.sendMessage({ action: 'openPopup' });
+  }
+  if (event.key.toLowerCase() === 's') {
+    silentSaveBookmark();
+  }
+}
+
+// ─── Message listener ─────────────────────────────────────────────────────────
 function initializeMessageListener() {
   debugLog('Messaging', 'Setting up message listener');
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    debugLog('Messaging', 'Received message', { action: request.action, sender });
+  chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+    debugLog('Messaging', 'Received', { action: request.action });
 
-    const handleMessage = async () => {
-      try {
-        if (request.action === "ping") {
-          sendResponse({ status: "ready" });
-          return;
+    const handle = async () => {
+      if (request.action === 'ping') {
+        sendResponse({ status: 'ready' });
+        return;
+      }
+      if (request.action === 'getCurrentTime') {
+        const activeVideo = document.querySelector('video') || video;
+        sendResponse({ currentTime: activeVideo ? activeVideo.currentTime : 0 });
+        return;
+      }
+      if (request.action === 'getBookmarkData') {
+        const activeVideo = document.querySelector('video') || video;
+        const titleEl = document.querySelector('h1.ytd-video-primary-info-renderer');
+        sendResponse({ 
+          currentTime: activeVideo ? activeVideo.currentTime : 0,
+          title: titleEl ? titleEl.textContent.trim() : null
+        });
+        return;
+      }
+      if (request.action === 'getCurrentChapter') {
+        sendResponse({ chapter: getCurrentChapter() });
+        return;
+      }
+      if (request.action === 'getTranscriptSnippet') {
+        const transcript = await fetchTranscript();
+        const snippet = getTextAtTimestamp(transcript, request.timestamp);
+        sendResponse({ snippet: snippet || null });
+        return;
+      }
+      if (request.action === 'showToast') {
+        showSilentSaveIndicator(request.message, request.type);
+        sendResponse({});
+        return;
+      }
+      if (request.action === 'getTimestamp') {
+        // Always query fresh — YouTube SPA may replace the video element
+        const activeVideo = document.querySelector('video') || video;
+        if (!activeVideo) throw new Error('Video element not found');
+        video = activeVideo; // keep cache fresh
+        sendResponse({ timestamp: activeVideo.currentTime });
+        return;
+      }
+      if (request.action === 'seekTo') {
+        const activeVideo = document.querySelector('video') || video;
+        if (activeVideo) {
+          video = activeVideo;
+          activeVideo.currentTime = request.time;
+          activeVideo.play().catch(() => {});
         }
-
-        if (request.action === "getTimestamp") {
-          if (!video) {
-            video = document.querySelector('video');
-          }
-          
-          if (!video) {
-            throw new Error("Video element not found");
-          }
-
-          sendResponse({ timestamp: video.currentTime });
-          return;
+        sendResponse({});
+        return;
+      }
+      if (request.action === 'setTimestamp') {
+        const activeVideo = document.querySelector('video') || video;
+        if (activeVideo) {
+          video = activeVideo;
+          activeVideo.currentTime = request.timestamp;
+          activeVideo.play().catch(() => {});
         }
-
-        if (request.action === "setTimestamp") {
-          if (!video) {
-            video = document.querySelector('video');
-          }
-          
-          if (video) {
-            debugLog('Video', 'Setting timestamp', { timestamp: request.timestamp });
-            video.currentTime = request.timestamp;
-            video.play().catch(err => {
-              debugLog('Video', 'Autoplay prevented', { error: err });
-            });
-          } else {
-            debugLog('Video', 'Video element not found for setTimestamp');
-          }
-          sendResponse({});
-          return;
-        }
-
-        if (request.action === "bookmarkUpdated") {
-          debugLog('Markers', 'Received bookmark update notification');
-          updateBookmarkMarkers();
-          sendResponse({});
-          return;
-        }
-      } catch (error) {
-        debugLog('Messaging', 'Error handling message', { error });
-        sendResponse({ error: error.message });
+        sendResponse({});
+        return;
+      }
+      if (request.action === 'bookmarkUpdated') {
+        updateBookmarkMarkers();
+        sendResponse({});
+        return;
+      }
+      if (request.action === 'getTranscriptAtTimestamp') {
+        const transcript = await fetchTranscript();
+        const text       = getTextAtTimestamp(transcript, request.timestamp);
+        sendResponse({ text: text || null });
+        return;
+      }
+      if (request.action === 'prefetchTranscript') {
+        fetchTranscript(); // fire-and-forget to warm the cache
+        sendResponse({});
+        return;
       }
     };
 
-    handleMessage().catch(error => {
-      debugLog('Messaging', 'Unhandled error in message listener', { error });
+    handle().catch(error => {
+      debugLog('Messaging', 'Error', { error });
       sendResponse({ error: error.message });
     });
 
-    return true; // Keep the message channel open for async response
+    return true; // keep channel open for async
   });
 }
 
-// Add styles for markers and tooltips
+// ─── Video title ──────────────────────────────────────────────────────────────
+async function getVideoTitle() {
+  const el = document.querySelector('h1.ytd-video-primary-info-renderer');
+  return el ? el.textContent.trim() : null;
+}
+
+async function saveVideoTitle() {
+  const videoId = new URLSearchParams(window.location.search).get('v');
+  if (!videoId) return;
+  const title = await getVideoTitle();
+  if (!title) return;
+
+  // Skip write if we already saved this exact title
+  if (savedTitlesCache[videoId] === title) return;
+
+  debugLog('Title', 'Saving', { videoId, title });
+  const result = await new Promise(resolve => chrome.storage.sync.get({ videoTitles: {} }, resolve));
+  const videoTitles = result.videoTitles;
+  if (videoTitles[videoId] === title) {
+    savedTitlesCache[videoId] = title; // already in storage, just cache it
+    return;
+  }
+  videoTitles[videoId] = title;
+  chrome.storage.sync.set({ videoTitles });
+  savedTitlesCache[videoId] = title;
+}
+
+// ─── Extension reconnect ──────────────────────────────────────────────────────
+async function attemptReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return false;
+  debugLog('Reconnect', `Attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS}`);
+  reconnectAttempts++;
+  try {
+    await chrome.runtime.sendMessage({ action: 'ping' });
+    reconnectAttempts = 0;
+    return true;
+  } catch {
+    await new Promise(r => setTimeout(r, RECONNECT_DELAY));
+    return false;
+  }
+}
+
+// ─── Injected styles ──────────────────────────────────────────────────────────
 function injectStyles() {
   debugLog('Styles', 'Injecting marker styles');
   const style = document.createElement('style');
@@ -219,19 +548,14 @@ function injectStyles() {
       position: absolute;
       width: 3px;
       height: 100%;
-      background-color: #4da1ee;
       z-index: 2;
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 0 4px rgba(77, 161, 238, 0.5);
     }
-
     .yt-bookmark-marker:hover {
       transform: scaleX(2) scaleY(1.2);
-      background-color: #75b0e7;
-      box-shadow: 0 0 8px rgba(77, 161, 238, 0.8);
+      filter: brightness(1.3);
     }
-
     .yt-bookmark-marker::before {
       content: '';
       position: absolute;
@@ -240,18 +564,15 @@ function injectStyles() {
       transform: translateX(-50%);
       width: 7px;
       height: 7px;
-      background-color: #4da1ee;
+      background-color: inherit;
       border-radius: 50%;
       opacity: 0;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-
     .yt-bookmark-marker:hover::before {
       opacity: 1;
       transform: translateX(-50%) scale(1.2);
-      box-shadow: 0 0 6px rgba(77, 161, 238, 0.8);
     }
-
     .yt-bookmark-marker::after {
       content: attr(data-description);
       position: absolute;
@@ -271,130 +592,101 @@ function injectStyles() {
       pointer-events: none;
       margin-bottom: 5px;
       z-index: 9999;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.1);
     }
-
     .yt-bookmark-marker:hover::after {
       visibility: visible;
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
-
-    /* Add ripple effect when marker is clicked */
     .yt-bookmark-marker.clicked {
-      animation: ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: bm-ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes bm-ripple {
+      0%   { box-shadow: 0 0 0 0 rgba(77,161,238,0.4); }
+      100% { box-shadow: 0 0 0 10px rgba(77,161,238,0); }
     }
 
-    @keyframes ripple {
-      0% {
-        box-shadow: 0 0 0 0 rgba(77, 161, 238, 0.4);
-      }
-      100% {
-        box-shadow: 0 0 0 10px rgba(77, 161, 238, 0);
-      }
+    /* Silent-save toast */
+    .yt-bookmark-toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 99999;
+      background: rgba(45, 45, 45, 0.92);
+      color: white;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'Segoe UI', sans-serif;
+      border-left: 3px solid #4da1ee;
+      opacity: 0;
+      transform: translateY(-8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+    }
+    .yt-bookmark-toast--show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .yt-bookmark-cluster::after {
+      white-space: normal;
+      max-width: 300px;
+      word-break: break-word;
+      font-size: 11px;
+    }
+
+    /* Player bookmark button */
+    .yt-bookmark-player-btn {
+      color: white;
+      opacity: 0.9;
+      width: 40px !important;
+      height: 40px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 0 !important;
+      transition: opacity 0.15s, transform 0.15s;
+      vertical-align: middle;
+    }
+    .yt-bookmark-player-btn:hover {
+      opacity: 1;
+      transform: scale(1.15);
+      color: #14B8A6;
+    }
+    .yt-bookmark-player-btn.saving {
+      animation: bm-pulse 0.4s ease;
+    }
+    @keyframes bm-pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.3); color: #14B8A6; }
+      100% { transform: scale(1); }
     }
   `;
   document.head.appendChild(style);
 }
 
-// Add this function after debug logging setup
-async function getVideoTitle() {
-  const titleElement = document.querySelector('h1.ytd-video-primary-info-renderer');
-  if (titleElement) {
-    return titleElement.textContent.trim();
-  }
-  return null;
-}
-
-// Add this function to save video title
-async function saveVideoTitle() {
-  const videoId = new URLSearchParams(window.location.search).get('v');
-  if (!videoId) return;
-
-  const title = await getVideoTitle();
-  if (title) {
-    debugLog('Video', 'Saving video title', { videoId, title });
-    const result = await chrome.storage.local.get({ videoTitles: {} });
-    const videoTitles = result.videoTitles;
-    videoTitles[videoId] = title;
-    await chrome.storage.local.set({ videoTitles });
-  }
-}
-
-// Add this function to handle reconnection
-async function attemptReconnect() {
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    debugLog('Reconnect', 'Max reconnection attempts reached');
-    return false;
-  }
-
-  debugLog('Reconnect', `Attempting to reconnect (${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
-  reconnectAttempts++;
-
-  try {
-    await chrome.runtime.sendMessage({ action: "ping" });
-    debugLog('Reconnect', 'Reconnection successful');
-    reconnectAttempts = 0;
-    return true;
-  } catch (error) {
-    debugLog('Reconnect', 'Reconnection failed', { error });
-    await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY));
-    return false;
-  }
-}
-
-// Update the messaging function to handle disconnection
-async function sendMessageWithRetry(message) {
-  try {
-    return await chrome.runtime.sendMessage(message);
-  } catch (error) {
-    if (error.message.includes('Extension context invalidated')) {
-      debugLog('Error', 'Extension context invalidated, attempting to reconnect');
-      const reconnected = await attemptReconnect();
-      if (reconnected) {
-        return await chrome.runtime.sendMessage(message);
-      }
-      throw new Error('Failed to reconnect to extension');
-    }
-    throw error;
-  }
-}
-
-// Initialize when the page loads
+// ─── Initialize ───────────────────────────────────────────────────────────────
 function initialize() {
-  if (isInitialized) {
-    debugLog('Init', 'Already initialized, skipping');
-    return;
-  }
-
+  if (isInitialized) { debugLog('Init', 'Already initialized'); return; }
   debugLog('Init', 'Initializing content script');
-  
+
   try {
     injectStyles();
     initializeVideoObserver();
+    initializeProgressBar();
     initializeMessageListener();
     document.addEventListener('keydown', handleKeyboardShortcut);
-    
-    // Add MutationObserver for title changes
-    const titleObserver = new MutationObserver(async () => {
-      try {
-        await saveVideoTitle();
-      } catch (error) {
-        debugLog('Title', 'Error saving video title', { error });
-      }
-    });
 
-    titleObserver.observe(document.body, {
-      subtree: true,
-      childList: true
+    // Debounce title saves — YouTube fires hundreds of DOM mutations per second
+    const titleObserver = new MutationObserver(() => {
+      clearTimeout(titleSaveTimer);
+      titleSaveTimer = setTimeout(() => saveVideoTitle().catch(() => {}), 3000);
     });
+    titleObserver.observe(document.body, { subtree: true, childList: true });
+    saveVideoTitle().catch(() => {});
 
-    // Initial title save
-    saveVideoTitle().catch(error => {
-      debugLog('Title', 'Error saving initial video title', { error });
-    });
-    
     isInitialized = true;
     debugLog('Init', 'Content script initialized successfully');
   } catch (error) {
@@ -403,21 +695,24 @@ function initialize() {
   }
 }
 
-if (document.readyState === "loading") {
-  debugLog('Init', 'Document still loading, waiting for DOMContentLoaded');
-  document.addEventListener("DOMContentLoaded", initialize);
+// Notify background that content script is ready
+chrome.runtime.sendMessage({ action: 'contentScriptReady' }, response => {
+  debugLog('Init', 'Sent contentScriptReady', response);
+});
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initialize);
 } else {
-  debugLog('Init', 'Document already loaded, initializing immediately');
   initialize();
 }
 
-// Cleanup on unload
-window.addEventListener('unload', () => {
+window.addEventListener('pagehide', () => {
   debugLog('Cleanup', 'Performing cleanup');
   document.removeEventListener('keydown', handleKeyboardShortcut);
-  if (video) {
-    video.removeEventListener('durationchange', updateBookmarkMarkers);
-  }
-  isInitialized = false;
-  reconnectAttempts = 0;
+  if (video) video.removeEventListener('durationchange', updateBookmarkMarkers);
+  isInitialized       = false;
+  reconnectAttempts   = 0;
+  cachedTranscript    = null;
+  transcriptFetchPromise = null;
+  cachedTranscriptVideoId = null;
 });
