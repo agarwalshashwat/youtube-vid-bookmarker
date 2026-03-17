@@ -1,0 +1,64 @@
+import DodoPayments from 'dodopayments';
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+
+const dodo = new DodoPayments({
+  bearerToken: process.env.DODO_PAYMENTS_API_KEY!,
+  webhookKey: process.env.DODO_PAYMENTS_WEBHOOK_SECRET!,
+  environment: process.env.NODE_ENV === 'production' ? 'live_mode' : 'test_mode',
+});
+
+// Service role client — bypasses RLS so the webhook can update any user's profile
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
+
+export async function POST(request: NextRequest) {
+  const body = await request.text();
+
+  let event: DodoPayments.WebhookPayload;
+  try {
+    event = dodo.webhooks.unwrap(body, {
+      headers: {
+        'webhook-id':        request.headers.get('webhook-id')        ?? '',
+        'webhook-signature': request.headers.get('webhook-signature') ?? '',
+        'webhook-timestamp': request.headers.get('webhook-timestamp') ?? '',
+      },
+    }) as DodoPayments.WebhookPayload;
+  } catch {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+  }
+
+  const { type, data } = event;
+
+  // payment.succeeded fires for one-time purchases (Lifetime plan)
+  if (type === 'payment.succeeded') {
+    const payment = data as DodoPayments.WebhookPayload.Payment;
+    const userId = payment.metadata?.user_id;
+    if (userId) {
+      await supabaseAdmin.from('profiles').update({ is_pro: true }).eq('id', userId);
+    }
+  }
+
+  // subscription.active fires when a new subscription starts
+  // subscription.renewed fires on each successful billing cycle
+  else if (type === 'subscription.active' || type === 'subscription.renewed') {
+    const sub = data as DodoPayments.WebhookPayload.Subscription;
+    const userId = sub.metadata?.user_id;
+    if (userId) {
+      await supabaseAdmin.from('profiles').update({ is_pro: true }).eq('id', userId);
+    }
+  }
+
+  // subscription.cancelled / expired — revoke Pro access
+  else if (type === 'subscription.cancelled' || type === 'subscription.expired') {
+    const sub = data as DodoPayments.WebhookPayload.Subscription;
+    const userId = sub.metadata?.user_id;
+    if (userId) {
+      await supabaseAdmin.from('profiles').update({ is_pro: false }).eq('id', userId);
+    }
+  }
+
+  return NextResponse.json({ received: true });
+}
