@@ -82,14 +82,15 @@
 
 ---
 
-## Phase 5 — Revision & Learning ✅ Done
+## Phase 5 — Revisit & Learning ✅ Done
 
 > Turn bookmarks into a study tool.
 
-- [x] **▶ Revision Mode** — plays each bookmarked segment sequentially (default 60s clips) with HUD overlay showing clip progress and countdown
+- [x] **▶ Revisit Mode** — plays each bookmarked segment sequentially (default 60s clips) with HUD overlay showing clip progress and countdown
 - [x] `pendingRevision` stored in `chrome.storage.local`; content script picks it up when the YouTube tab loads
-- [x] **Spaced Revision** — bookmarks store `reviewSchedule: [1, 3, 7]` (days after creation); popup shows "📚 Revision Today" panel when reviews are due
+- [x] **Spaced Revisit** — bookmarks store `reviewSchedule: [1, 3, 7]` (days after creation); popup shows "📚 Revisit Today" panel when reviews are due
 - [x] Clicking a due item marks it reviewed and navigates to the timestamp
+- [x] **Custom revisit reminders** — per-video reminder with user-defined interval (days); stored as `rem_{videoId}` in `chrome.storage.sync`; popup shows active reminder with change/clear controls
 
 ---
 
@@ -103,10 +104,14 @@
 - [x] Save button renamed "Save Moment" — more emotionally resonant
 - [x] Sign-in as icon button — SVG person icon keeps header from overflowing
 - [x] Header separator — feature pills (Summary/Share/Post) visually separated from nav/auth
+- [x] **Clipmark logo** — teal rounded-square play+bookmark icon; cropped/resized to `icon-16/48/128.png` and `clipmark-logo.png` used in popup and dashboard headers
+- [x] **Groups view** — playlist-like video grouping in dashboard; create/rename/delete groups, toggle videos in/out; stored as `vgroups` in `chrome.storage.sync`
+- [x] **Sign-out button** — SVG icon in popup header; clears `bmUser` from sync storage
+- [x] **✦ Pro upgrade button** — always-visible purple pill in popup header; opens `/upgrade` in new tab; hidden when user is already Pro
 
 ---
 
-## Phase 7 — Monetization 🔲 Next
+## Phase 7 — Monetization ✅ Done
 
 > Convert free users to paying ones.
 
@@ -123,60 +128,242 @@
 - Unlimited local bookmarks
 - 5 public shared collections
 - No AI features (Auto, Summary, Tags, Social Post)
-- No Revision Mode export
+- No Revisit Mode
 
 ### Pro Tier Unlocks
 - Unlimited shared collections
 - AI auto-fill, summaries, smart tag suggestions
 - Social post generation (X, LinkedIn, Threads)
-- Revision Mode
+- Revisit Mode
 - Priority support
 
-### Implementation Tasks
-- [ ] Supabase migration: `ALTER TABLE profiles ADD COLUMN is_pro BOOLEAN DEFAULT false`
-- [ ] Stripe integration — `/api/checkout` creates a Stripe session; webhook sets `is_pro = true` on payment
-- [ ] Stripe products: Monthly ($5), Annual ($40), Lifetime ($40, limited-time)
-- [ ] Pro upgrade prompt — shown when user hits a Pro-gated feature without a subscription
-- [ ] Upgrade page at `/upgrade` — tier comparison table + Stripe checkout CTA
+### Implementation
+- [x] Dodo Payments integration — Merchant of Record, handles VAT/global compliance
+- [x] `POST /api/checkout` (Server Action) — creates Dodo `checkoutSessions`, passes `metadata.user_id` for webhook mapping
+- [x] `POST /api/webhooks/dodo` — verifies signature, handles `payment.succeeded`, `subscription.active/renewed` → `is_pro=true`; `subscription.cancelled/expired` → `is_pro=false`
+- [x] Supabase service-role client in webhook handler to bypass RLS
+- [x] `/upgrade` page — Free / Pro Monthly / Pro Annual pricing cards with feature comparison table
+- [x] Success banner on `?success=true`; "Already on Pro" banner for existing subscribers
+- [x] `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_WEBHOOK_SECRET`, `DODO_MONTHLY_PRODUCT_ID`, `DODO_ANNUAL_PRODUCT_ID`, `DODO_LIFETIME_PRODUCT_ID` env vars
+- [ ] Supabase migration: `ALTER TABLE profiles ADD COLUMN is_pro BOOLEAN DEFAULT false` *(run once in prod — manual step)*
 - [ ] Lifetime → Annual migration logic for when lifetime offer ends
 
 ---
 
-## Phase 8 — Growth 🔲 Later
+## Phase 7.5 — Quick Wins ✅ Done
 
-> Reach users beyond YouTube and Chrome.
+> High-impact, low-effort features before major new phases.
 
-### Distribution
-- [ ] Chrome Web Store listing — screenshots, description, keyword optimization
-- [ ] Submit to Firefox Add-ons (WebExtensions API is mostly MV3-compatible)
-- [ ] Edge Add-ons (Chrome extension already compatible — just needs publishing)
+### UX Polish (1-2 days each)
+- [x] **Onboarding tour** — 3-step overlay on first install: "1. Play video → 2. Press Alt+S → 3. See your bookmarks"
+- [ ] Empty state illustrations — friendly graphics when no bookmarks exist
+- [x] Keyboard shortcut hints — tooltip on Save Moment button showing Alt+S shortcut
+- [ ] Success animations — confetti or checkmark animation on first share
+
+### Engagement Hooks
+- [ ] **Bookmark streak** — "5-day streak! 🔥" badge in popup for daily usage
+- [ ] Weekly digest email — "You bookmarked 12 moments this week" (opt-in, Pro)
+- [ ] Milestone celebrations — "100 bookmarks!" toast with share prompt
+
+### Viral Mechanics
+- [x] **Watermark on share pages** — "Made with Clipmark" footer CTA with link to Chrome extension
+- [ ] Referral program — give 1 month Pro, get 1 month Pro
+- [ ] Public stats badge — embeddable "Bookmarked with Clipmark" SVG for READMEs/profiles
+
+### Conversion Optimization
+- [x] Soft paywall — show AI summary preview (blurred), "Upgrade to reveal"
+- [x] Usage limit nudge — "You've used 4 of 5 free shares this month"
+- [ ] Testimonial carousel on /upgrade page
+
+---
+
+## Phase 8 — Power Tools 🔲 Next
+
+> Add workflow features that create stickiness and justify Pro pricing.
+
+### Command Palette & Search
+- [ ] **⌘K global search** — instant search across all bookmarks from popup or dashboard
+- [ ] Fuzzy search — match partial words, typos, tag names
+- [ ] Quick actions — "Go to video", "Share", "Add to group", "Delete" from palette
+- [ ] Recent bookmarks shortcut — last 10 bookmarks accessible via ⌘K
+
+### Bulk Operations
+- [ ] **Bulk URL import** — paste multiple YouTube URLs, scrape titles, add to library
+- [ ] Bulk tag editor — select multiple bookmarks → apply/remove tags at once
+- [ ] Bulk move to group — drag-select or checkbox → assign to group
+- [ ] Import from YouTube Watch Later — OAuth to pull user's watch later queue (Pro)
+
+### Automations (Pro)
+- [ ] **Auto-tag rules** — e.g., videos with "interview" in title → auto-tag `#interview`
+- [ ] Auto-summarize on video complete — trigger summary when last bookmark saved
+- [ ] Auto-share rule — instantly publish when video has ≥5 bookmarks
+- [ ] Scheduled revisit digest — daily/weekly email of due bookmarks
+
+### Transcript Power Features (Pro)
+- [ ] **Click-to-bookmark from transcript** — click any transcript line to bookmark it
+- [ ] Full transcript download — export transcript as `.txt` or `.srt` with bookmarks highlighted
+- [ ] Transcript search — Ctrl+F within transcript, jump to timestamp
+
+---
+
+## Phase 9 — Integrations 🔲 Later
+
+> Push bookmarks where users already work.
+
+### Direct Sync (Pro)
+- [ ] **Notion sync** — push bookmarks as database rows with title, tags, timestamp, link
+- [ ] **Obsidian vault push** — create `.md` files directly in user's vault folder
+- [ ] Readwise integration — send highlights to Readwise for spaced repetition
+- [ ] Roam Research — block-level import
+
+### Webhooks & Automation Platforms
+- [ ] Outgoing webhooks — POST to user URL on bookmark create/delete/share
+- [ ] Zapier integration — trigger automations when events occur
+- [ ] Make (Integromat) — same as Zapier for European users
+- [ ] IFTTT applets — "If new Clipmark bookmark, then add to Todoist"
+
+### RSS & Feeds
+- [ ] **Public RSS feed per user** — subscribe to someone's bookmark stream
+- [ ] Private RSS feed — personal feed for self-consumption in readers
+- [ ] OPML export — export all followed creators as OPML
+
+---
+
+## Phase 10 — Distribution & Growth 🔲 Later
+
+> Reach users beyond Chrome and grow the brand.
+
+### Chrome Web Store
+- [ ] Polished listing — 5 screenshots, feature video, keyword-rich description
+- [ ] Localization — Spanish, Portuguese, German, French, Japanese
+- [ ] Review prompt — in-extension prompt after 10th bookmark ("Enjoying Clipmark?")
+
+### Cross-Browser
+- [ ] Firefox Add-ons — WebExtensions API mostly compatible
+- [ ] Edge Add-ons — republish Chrome extension
+- [ ] Safari Web Extension — requires Xcode wrapper
 
 ### Platform Expansion
-- [ ] Vimeo support — large professional/creative audience
-- [ ] Loom support — async video messaging, massive enterprise use case
-- [ ] Architecture: make `content.js` platform-agnostic with site-specific adapters
+- [ ] Vimeo support — creative/professional audience
+- [ ] Loom support — async meetings, enterprise use case
+- [ ] Twitch VOD support — gaming/streaming niche
+- [ ] Architecture: platform-agnostic `content.js` with site adapters
 
-### Integrations
-- [ ] Notion — push bookmarks as database rows via API
-- [ ] Obsidian — export as `.md` files directly to vault
-- [ ] Zapier / Make — trigger automations when a bookmark is added
-- [ ] Email digest — weekly summary of bookmarks added
+### Mobile
+- [ ] Mobile web dashboard — responsive `/bookmarks` page for phone access
+- [ ] Progressive Web App — installable on home screen
+- [ ] Native companion app (v2) — React Native or Flutter
 
-### Collaboration
-- [ ] Shared collections — invite teammates to annotate a video together
+---
+
+## Phase 11 — Collaboration & Teams 🔲 Future
+
+> Turn Clipmark into a team tool.
+
+### Shared Collections
+- [ ] Invite teammates to annotate a video together
+- [ ] Real-time sync (Supabase Realtime) — see collaborators' bookmarks live
 - [ ] Comments on individual bookmarks
-- [ ] Real-time sync (Supabase Realtime)
+- [ ] Mention teammates with @username
+
+### Team Dashboard
+- [ ] Team workspace — shared library visible to all members
+- [ ] Admin controls — manage seats, billing, permissions
+- [ ] Activity feed — see what teammates are bookmarking
+
+### Enterprise (Future)
+- [ ] SSO (SAML/OIDC)
+- [ ] Custom domain for share pages (`clips.yourcompany.com`)
+- [ ] Audit logs
+- [ ] SLA & priority support
+
+---
+
+## Pricing Evolution
+
+> Lessons from Kortex: their lifetime jumped from $40 → $99 as traction grew.
+
+| Stage | Lifetime | Monthly | Annual |
+|-------|----------|---------|--------|
+| **Launch (current)** | $40 | $5/mo | $40/yr |
+| **After 1K paying users** | $59 | $6/mo | $50/yr |
+| **After 5K paying users** | $79 | $7/mo | $60/yr |
+| **After 10K paying users** | $99 | $8/mo | $70/yr |
+
+**Grandfather clause**: existing lifetime users keep lifetime access regardless of price increases.
 
 ---
 
 ## Immediate Next Steps
 
+### Week 1 — Launch Readiness
 ```
 → Run Supabase migration: ALTER TABLE profiles ADD COLUMN is_pro BOOLEAN DEFAULT false
-→ Deploy webapp to Vercel (push to main under webapp/ root)
-→ Confirm ANTHROPIC_API_KEY + NEXT_PUBLIC_APP_URL set in Vercel env vars
-→ Set up Stripe for Phase 7 monetization
+→ Register Dodo webhook endpoint: POST /api/webhooks/dodo (in Dodo dashboard)
+→ Set DODO_* product IDs in Vercel env vars
+→ Deploy webapp to Vercel (push to main)
+→ Confirm env vars: ANTHROPIC_API_KEY, NEXT_PUBLIC_APP_URL, SUPABASE_SERVICE_ROLE_KEY
 ```
+
+### Week 2 — Chrome Web Store
+```
+→ Create 5 polished screenshots (popup, dashboard, share page, revisit mode, AI features)
+→ Record 30-second feature video
+→ Write keyword-optimized description (bookmark, timestamp, YouTube notes, study tool)
+→ Submit extension to Chrome Web Store
+```
+
+### Week 3 — Quick Wins (Phase 7.5)
+```
+→ Add onboarding tour (3-step overlay)
+→ Implement "Made with Clipmark" watermark on share pages
+→ Add keyboard shortcut hints in popup
+→ Create soft paywall with blurred AI summary preview
+```
+
+### Week 4 — Power Features (Phase 8)
+```
+→ Implement ⌘K command palette in dashboard
+→ Add bulk URL import for content creators
+→ Build click-to-bookmark from transcript view
+```
+
+### Month 2-3 — Growth & Integrations
+```
+→ Notion direct sync (Pro)
+→ Firefox extension port
+→ Referral program
+→ Weekly digest emails (opt-in)
+```
+
+---
+
+## Competitive Analysis & Positioning
+
+> Clipmark vs alternatives — why users choose us.
+
+### Direct Competitors
+| Product | Focus | Clipmark Advantage |
+|---------|-------|-------------------|
+| YouTube's native "Save" | Basic watch later queue | Timestamped moments, not whole videos |
+| Notion Web Clipper | General bookmarking | Native YouTube integration, transcript AI, revisit mode |
+| Readwise Reader | Article/highlight tool | Video-first, timestamp markers, visual timeline |
+| Video Note (dead) | Timestamp notes | Active development, cloud sync, sharing |
+
+### Adjacent Products (Inspiration Sources)
+| Product | What They Do Well | What We Can Learn |
+|---------|------------------|-------------------|
+| **Kortex** (NotebookLM) | Bulk import, command palette, automations, pricing progression | ⌘K search, auto-rules, raise prices with traction |
+| **Raindrop.io** | Beautiful UI, nested collections, browser integration | Visual polish, folder hierarchy, cross-browser |
+| **Pocket** | "Read later" simplicity, tagging | One-click save UX, tag discoverability |
+| **Hypothesis** | Annotation on any page, social layer | Comments on bookmarks, collaborative annotation |
+
+### Clipmark's Unfair Advantages
+1. **Timestamp precision** — bookmark exact moments, not just videos
+2. **Transcript AI** — auto-describe bookmarks from what's being said
+3. **Revisit Mode** — turn bookmarks into a study playlist
+4. **Visual markers** — see bookmarks on the YouTube progress bar
+5. **Share pages** — one-click public curated guide
 
 ---
 
@@ -193,13 +380,13 @@ Clipmark turns passive watching into structured, replayable notes — then resur
 
 ### 1. Developers — Interview & Tutorial Recap
 **Problem:** A 2-hour system design lecture is too long to re-watch the night before an interview.
-**Solution:** Bookmark key concepts → Revision Mode plays only those clips. `2 hours → 6 minutes`.
-**Key features:** Revision Mode, Spaced Revision, tags, AI auto-fill
+**Solution:** Bookmark key concepts → Revisit Mode plays only those clips. `2 hours → 6 minutes`.
+**Key features:** Revisit Mode, Spaced Revisit, tags, AI auto-fill
 
-### 2. Students — Lecture Revision & Exam Prep
+### 2. Students — Lecture Revisit & Exam Prep
 **Problem:** A 1.5-hour physics lecture has 20 minutes of examinable content scattered throughout.
-**Solution:** Bookmark important moments → Revision Mode before the exam → Spaced Revision resurfaces them 1, 3, and 7 days later.
-**Key features:** Revision Mode, Spaced Revision, AI summary, tags
+**Solution:** Bookmark important moments → Revisit Mode before the exam → Spaced Revisit resurfaces them 1, 3, and 7 days later.
+**Key features:** Revisit Mode, Spaced Revisit, AI summary, tags
 
 ### 3. Tech Creators — Content to Posts
 **Problem:** Watching a 3-hour podcast to extract 5 usable insights takes all day.
@@ -225,8 +412,61 @@ Clipmark turns passive watching into structured, replayable notes — then resur
 | `#concept` | A definition or core idea |
 | `#example` | A worked example or demo |
 | `#interview` | Interview prep content |
-| `#revision` | Worth revisiting before an exam |
+| `#revisit` | Worth revisiting before an exam |
 | `#quote` | A quotable moment |
 | `#insight` | A key takeaway |
 | `#important` | General high-value moment |
 | `#formula` | Mathematical or algorithmic derivation |
+
+---
+
+## Feature Ideas Backlog
+
+> Ideas to evaluate — not committed to roadmap yet.
+
+### Differentiators (High Impact)
+| Feature | Description | Effort | Pro? |
+|---------|-------------|--------|------|
+| **Chapter Generator** | Export bookmarks as YouTube chapter timestamps (copy-paste into description) | Medium | ✓ |
+| **Clip Creator** | Generate shareable video clips from bookmark → bookmark+30s | High | ✓ |
+| **Study Mode Quiz** | Flashcard-style quiz from bookmarks: "What was discussed at 12:34?" | High | ✓ |
+| **Transcript Highlights** | View full transcript with bookmarked sections highlighted | Medium | ✓ |
+| **Voice Memo Bookmarks** | Dictate bookmark description via microphone | Low | - |
+
+### Engagement Features
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **"Bookmark This" browser action** | Right-click any YouTube link → add to Clipmark | Low |
+| **Chrome omnibox search** | Type "cm [query]" in address bar to search bookmarks | Low |
+| **Bookmark from URL** | Paste youtube.com/watch?v=xxx&t=120 → auto-create bookmark at 2:00 | Low |
+| **Multi-video revisit playlist** | Combine bookmarks from multiple videos into one revisit session | Medium |
+
+### Social / Viral
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Public leaderboard** | Top sharers this week (opt-in) | Low |
+| **"Fork" a collection** | Copy someone's public collection to your account | Low |
+| **Embed as React component** | `<ClipmarkEmbed shareId="xxx" />` npm package | Medium |
+| **Discord bot** | `/clipmark share <video-url>` posts bookmark summary | Medium |
+
+### Content Creator Tools
+| Feature | Description | Effort | Pro? |
+|---------|-------------|--------|------|
+| **Bulk video import** | Paste 50 YouTube URLs → add to library with titles | Medium | ✓ |
+| **Channel tracker** | Get notified when a channel uploads, auto-add to library | High | ✓ |
+| **Playlist import** | Import entire YouTube playlist with video titles | Medium | ✓ |
+| **Batch summarize** | Run AI summary on 10 videos at once | Medium | ✓ |
+
+---
+
+## Metrics to Track
+
+| Metric | Target | Why It Matters |
+|--------|--------|----------------|
+| **DAU/MAU ratio** | >20% | Measures stickiness |
+| **Bookmarks per user** | >15 after 30 days | Engagement depth |
+| **Share rate** | >5% of users share at least 1 collection | Viral coefficient |
+| **Free → Pro conversion** | >3% | Revenue sustainability |
+| **Revisit mode usage** | >10% of Pro users weekly | Justifies Pro differentiation |
+| **Chrome Web Store rating** | >4.5 stars | Social proof for new installs |
+| **Time to first bookmark** | <60s after install | Onboarding quality |

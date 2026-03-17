@@ -40,14 +40,14 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { shareId } = await params;
   const collection = await getCollection(shareId);
-  if (!collection) return { title: 'Not found — Bookmarker' };
+  if (!collection) return { title: 'Not found — Clipmark' };
 
   const title = collection.video_title || 'YouTube Video';
   return {
-    title: `${title} — Bookmarker`,
+    title: `${title} — Clipmark`,
     description: `${collection.bookmarks.length} timestamped bookmarks for "${title}"`,
     openGraph: {
-      title: `${title} — Bookmarker`,
+      title: `${title} — Clipmark`,
       description: `${collection.bookmarks.length} curated moments from this video.`,
       type: 'website',
     },
@@ -73,7 +73,7 @@ export default async function SharePage(
       <nav className={styles.nav}>
         <a href="/" className={styles.navLogo}>
           <span className={styles.logoIcon}>▶</span>
-          <span className={styles.logoText}>Bookmarker</span>
+          <span className={styles.logoText}>Clipmark</span>
         </a>
         <a href={ytBase} target="_blank" rel="noopener noreferrer" className={styles.navLink}>
           Watch on YouTube →
@@ -135,10 +135,12 @@ export default async function SharePage(
 
       {/* ── Footer CTA ── */}
       <footer className={styles.footer}>
-        <span>Made with Bookmarker</span>
-        <span className={styles.dot}>·</span>
-        <a href="/" className={styles.footerLink}>
-          Bookmark your own videos →
+        <a href="/" className={styles.footerBrand}>
+          <span className={styles.logoIcon}>▶</span>
+          <span>Made with <strong>Clipmark</strong></span>
+        </a>
+        <a href="https://chrome.google.com/webstore" className={styles.footerLink}>
+          Bookmark your own videos — it&apos;s free →
         </a>
       </footer>
 

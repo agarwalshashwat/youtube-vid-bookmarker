@@ -3,40 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bookmarks — YouTube Bookmarker</title>
+    <title>Bookmarks — Clipmark</title>
     <link rel="stylesheet" href="bookmarks.css">
 </head>
 <body class="bookmarks-page">
 
     <div class="page-header">
         <div class="page-logo">
-            <span class="popup-logo-icon">▶</span>
-            <span class="page-title">YouTube Bookmarker</span>
+            <img src="clipmark-logo.png" class="popup-logo-icon" alt="Clipmark">
+            <span class="page-title">Clipmark</span>
         </div>
+        <a id="dashboard-upgrade-btn" href="https://clipmark-chi.vercel.app/upgrade" target="_blank" class="dashboard-upgrade-btn">✦ Upgrade to Pro</a>
+    </div>
+
+    <div class="page-subnav">
+        <button class="subnav-link subnav-link--active" id="subnav-all">All Bookmarks</button>
+        <button class="subnav-link" id="subnav-revisit">Revisit Queue <span class="subnav-badge" id="revisit-badge" style="display:none">0</span></button>
+        <a class="subnav-link" href="https://clipmark-chi.vercel.app" target="_blank" rel="noopener">Shared ↗</a>
     </div>
 
     <div class="container">
 
         <div class="toolbar">
-            <input type="text" id="search-input" placeholder="Search notes, titles, or timestamps..." class="toolbar-search">
-            <select id="sort-select" class="toolbar-sort">
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="timestamp">By timestamp</option>
-            </select>
-            <button id="bulk-delete-btn" class="toolbar-btn toolbar-btn--danger" style="display:none">Delete (<span id="bulk-count">0</span>)</button>
-            <div class="view-toggle">
-                <button id="view-cards"    class="toolbar-btn view-btn" title="Card view">⊞</button>
-                <button id="view-timeline" class="toolbar-btn view-btn" title="Timeline view">⏱</button>
+            <div class="toolbar-row-1">
+                <input type="text" id="search-input" placeholder="Search notes, titles, or timestamps..." class="toolbar-search">
+                <button id="save-filter-btn" class="toolbar-btn save-filter-btn" title="Save this search as a filter" style="display:none">⊕ Save</button>
+                <select id="sort-select" class="toolbar-sort">
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="timestamp">By timestamp</option>
+                </select>
+                <div class="view-toggle">
+                    <button id="view-cards"     class="toolbar-btn view-btn" title="Card view">⊞</button>
+                    <button id="view-timeline"  class="toolbar-btn view-btn" title="Timeline view">⏱</button>
+                    <button id="view-groups"    class="toolbar-btn view-btn" title="Groups">⊗</button>
+                    <button id="view-analytics" class="toolbar-btn view-btn" title="Analytics">📊</button>
+                </div>
+                <button id="density-btn" class="toolbar-btn" title="Toggle density">⊟</button>
+                <button id="overflow-btn" class="toolbar-btn overflow-btn" title="Export / Import">···</button>
             </div>
-            <div class="toolbar-actions">
-                <button id="export-json" class="toolbar-btn">↓ JSON</button>
-                <button id="export-csv"  class="toolbar-btn">↓ CSV</button>
-                <button id="export-md"   class="toolbar-btn">↓ MD</button>
-                <button id="import-btn"  class="toolbar-btn toolbar-btn--import">↑ Import</button>
-                <input type="file" id="import-input" accept=".json" style="display:none">
+            <div class="toolbar-row-2" id="toolbar-row-2">
+                <span class="bulk-select-label"><span id="bulk-count">0</span> selected</span>
+                <button id="bulk-delete-btn" class="toolbar-btn toolbar-btn--danger">Delete selected</button>
             </div>
+            <div class="saved-filters-row" id="saved-filters-row"></div>
         </div>
+
+        <div id="export-popover" class="export-popover">
+            <div class="ep-section">
+                <div class="ep-label">Export</div>
+                <button id="export-json" class="ep-btn">↓ JSON</button>
+                <button id="export-csv"  class="ep-btn">↓ CSV</button>
+                <button id="export-md"   class="ep-btn">↓ Markdown</button>
+            </div>
+            <div class="ep-section">
+                <div class="ep-label">Pro Formats <span class="ep-pro-badge">✦ Pro</span></div>
+                <button id="export-obsidian"   class="ep-btn ep-btn--pro">↓ Obsidian</button>
+                <button id="export-notion-csv" class="ep-btn ep-btn--pro">↓ Notion CSV</button>
+                <button id="export-reading"    class="ep-btn ep-btn--pro">↓ Reading List</button>
+            </div>
+            <div class="ep-divider"></div>
+            <button id="import-btn" class="ep-btn ep-btn--import">↑ Import JSON</button>
+            <input type="file" id="import-input" accept=".json" style="display:none">
+        </div>
+
+        <div id="stats-bar" class="stats-bar"></div>
 
         <div id="bookmarks-container">
             <div class="loading-spinner">Loading bookmarks…</div>

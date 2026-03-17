@@ -30,12 +30,33 @@ function formatTimestamp(seconds) {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+function relativeTime(ts) {
+  const diff   = Date.now() - ts;
+  const mins   = Math.floor(diff / 60000);
+  const hrs    = Math.floor(diff / 3600000);
+  const days   = Math.floor(diff / 86400000);
+  const months = Math.floor(days / 30);
+  if (mins < 1)    return 'just now';
+  if (mins < 60)   return `${mins}m ago`;
+  if (hrs < 24)    return `${hrs}h ago`;
+  if (days < 30)   return `${days}d ago`;
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
 function showToast(message, type = 'error') {
   const toast = document.getElementById(`${type}-toast`);
   if (!toast) return;
   toast.textContent = message;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ─── Pro gate ─────────────────────────────────────────────────────────────────
+async function checkPro() {
+  return new Promise(resolve =>
+    chrome.storage.sync.get({ bmUser: null }, r => resolve(r.bmUser?.isPro === true))
+  );
 }
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
@@ -72,11 +93,80 @@ async function deleteBookmark(videoId, bookmarkId) {
   });
 }
 
+async function updateBookmark(videoId, bookmarkId, patch) {
+  return new Promise((resolve, reject) => {
+    const key = bmKey(videoId);
+    chrome.storage.sync.get({ [key]: [] }, result => {
+      if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+      const updated = result[key].map(b => b.id === bookmarkId ? { ...b, ...patch } : b);
+      chrome.storage.sync.set({ [key]: updated }, () => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve();
+      });
+    });
+  });
+}
+
+// ─── Saved Searches (Pro) ─────────────────────────────────────────────────────
+async function getSavedSearches() {
+  return new Promise(resolve =>
+    chrome.storage.sync.get({ savedSearches: [] }, r => resolve(r.savedSearches))
+  );
+}
+
+async function saveSavedSearch(name, query, sort) {
+  const searches = await getSavedSearches();
+  searches.push({ id: Date.now(), name, query, sort });
+  return new Promise(resolve => chrome.storage.sync.set({ savedSearches: searches }, resolve));
+}
+
+async function deleteSavedSearch(id) {
+  const searches = await getSavedSearches();
+  return new Promise(resolve =>
+    chrome.storage.sync.set({ savedSearches: searches.filter(s => s.id !== id) }, resolve)
+  );
+}
+
+async function renderSavedFilterPills() {
+  const row = document.getElementById('saved-filters-row');
+  if (!row) return;
+  const searches = await getSavedSearches();
+  if (searches.length === 0) { row.style.display = 'none'; return; }
+  row.style.display = 'flex';
+  row.innerHTML = searches.map(s => `
+    <div class="saved-filter-pill" data-query="${s.query}" data-sort="${s.sort || 'newest'}" data-id="${s.id}">
+      <span class="saved-filter-pill__name">${s.name}</span>
+      <button class="saved-filter-pill__del" data-id="${s.id}" title="Remove">×</button>
+    </div>`).join('');
+
+  row.querySelectorAll('.saved-filter-pill').forEach(pill => {
+    pill.addEventListener('click', e => {
+      if (e.target.closest('.saved-filter-pill__del')) return;
+      filterQuery = pill.dataset.query;
+      sortOrder   = pill.dataset.sort;
+      const searchInput = document.getElementById('search-input');
+      const sortSelect  = document.getElementById('sort-select');
+      if (searchInput) searchInput.value = filterQuery;
+      if (sortSelect)  sortSelect.value  = sortOrder;
+      renderBookmarks();
+    });
+  });
+
+  row.querySelectorAll('.saved-filter-pill__del').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      await deleteSavedSearch(parseInt(btn.dataset.id));
+      renderSavedFilterPills();
+    });
+  });
+}
+
 // ─── State ────────────────────────────────────────────────────────────────────
 let allBookmarks = [];
 let filterQuery  = '';
 let sortOrder    = 'newest';
 let viewMode     = localStorage.getItem('bm_viewMode') || 'cards';
+let density      = localStorage.getItem('bm_density')  || 'default';
 let selectedIds  = new Set();
 
 // ─── Sort & filter ────────────────────────────────────────────────────────────
@@ -110,27 +200,77 @@ function groupByVideo(bookmarks) {
   return groups;
 }
 
+// ─── Stats Bar ────────────────────────────────────────────────────────────────
+function renderStatsBar() {
+  const bar = document.getElementById('stats-bar');
+  if (!bar || allBookmarks.length === 0) {
+    if (bar) bar.style.display = 'none';
+    return;
+  }
+  const totalBm   = allBookmarks.length;
+  const totalVids = new Set(allBookmarks.map(b => b.videoId)).size;
+  const totalTags = new Set(allBookmarks.flatMap(b => b.tags || [])).size;
+  const lastTs    = Math.max(...allBookmarks.map(b => b.id));
+
+  bar.style.display = 'flex';
+  bar.innerHTML = `
+    <div class="stat-item">
+      <span class="stat-value">${totalBm}</span>
+      <span class="stat-label">Bookmarks</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value">${totalVids}</span>
+      <span class="stat-label">Videos</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value">${totalTags}</span>
+      <span class="stat-label">Unique tags</span>
+    </div>
+    <div class="stat-item stat-item--last">
+      <span class="stat-value stat-value--sm">${relativeTime(lastTs)}</span>
+      <span class="stat-label">Last saved</span>
+    </div>`;
+}
+
 // ─── Build timeline dots HTML for a video group ───────────────────────────────
 function buildTimeline(bookmarks) {
   const maxTs    = Math.max(...bookmarks.map(b => b.timestamp));
-  // Always leave ≥60s of empty track after the last bookmark and use at least
-  // 2 minutes total, so a lone early bookmark doesn't sit at the far right.
   const trackMax = Math.max(maxTs + 60, 120);
   return bookmarks.map(b => {
     const pct   = ((b.timestamp / trackMax) * 95).toFixed(2);
     const color = b.color || '#14B8A6';
     const label = `${formatTimestamp(b.timestamp)} — ${b.description || 'No note'}`;
-    return `<div class="vc-dot" style="left:${pct}%;background:${color}" title="${label}"></div>`;
+    return `<div class="vc-dot" style="left:${pct}%;background:${color}" data-label="${label.replace(/"/g, '&quot;')}" title="${label}"></div>`;
   }).join('');
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 async function renderBookmarks() {
   const container = document.getElementById('bookmarks-container');
-  const filtered  = applyFiltersAndSort(allBookmarks);
+
+  renderStatsBar();
+  updateSaveFilterBtn();
+
+  // Groups and analytics manage their own empty states and container classes
+  if (viewMode === 'groups') {
+    await renderGroupsView();
+    return;
+  }
+
+  if (viewMode === 'analytics') {
+    container.className = '';
+    container.innerHTML = '';
+    selectedIds.clear();
+    await renderAnalyticsView(container);
+    return;
+  }
+
+  const filtered = applyFiltersAndSort(allBookmarks);
+
+  // Apply density class for card/timeline views
+  container.className = density === 'default' ? '' : `density-${density}`;
 
   if (filtered.length === 0) {
-    container.className = '';
     container.innerHTML = allBookmarks.length === 0
       ? `<div class="empty-state">
            <div class="empty-state-icon">🔖</div>
@@ -147,7 +287,6 @@ async function renderBookmarks() {
 
   const videoTitles = await getVideoTitles();
   container.innerHTML = '';
-  container.className = '';
   selectedIds.clear();
   updateBulkDeleteBtn();
 
@@ -156,6 +295,7 @@ async function renderBookmarks() {
     return;
   }
 
+  // ── Cards view ───────────────────────────────────────────────────────────
   const grouped  = groupByVideo(filtered);
   const videoIds = Object.keys(grouped);
 
@@ -173,6 +313,12 @@ async function renderBookmarks() {
       Math.max(...grouped[b].map(x => x.id)) - Math.max(...grouped[a].map(x => x.id)));
   }
 
+  // Featured = video with most bookmarks (only when there are multiple videos)
+  const featuredVideoId = videoIds.length > 1
+    ? videoIds.reduce((best, vid) =>
+        (grouped[vid].length > grouped[best].length) ? vid : best, videoIds[0])
+    : null;
+
   videoIds.forEach(videoId => {
     const bookmarks = grouped[videoId];
     const title  = bookmarks[0].videoTitle || videoTitles[videoId] || `Video: ${videoId}`;
@@ -181,58 +327,142 @@ async function renderBookmarks() {
     const count  = bookmarks.length;
 
     const card = document.createElement('div');
-    card.className = 'vc-card';
+    card.className = 'vc-card' + (videoId === featuredVideoId ? ' vc-card--featured' : '');
 
-    // ── Chapter card view ────────────────────────────────────────────────────
-    {
-      card.innerHTML = `
-        <div class="vc-head">
-          <a href="${ytUrl}" target="_blank" rel="noopener" class="vc-thumb-wrap">
-            <img src="${thumb}" alt="${title}" class="vc-thumb" loading="lazy">
-          </a>
-          <div class="vc-meta">
-            <a class="vc-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
-            <div class="vc-count-row">
-              <span class="vc-count-icon">⏱</span>
-              <span class="vc-count-text">${count} bookmark${count !== 1 ? 's' : ''}</span>
-              <button class="vc-revision-btn" data-video-id="${videoId}">▶ Revision</button>
+    card.innerHTML = `
+      <div class="vc-head">
+        <a href="${ytUrl}" target="_blank" rel="noopener" class="vc-thumb-wrap">
+          <img src="${thumb}" alt="${title}" class="vc-thumb" loading="lazy">
+        </a>
+        <div class="vc-meta">
+          <a class="vc-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
+          <div class="vc-count-row">
+            <span class="vc-count-icon">⏱</span>
+            <span class="vc-count-text">${count} bookmark${count !== 1 ? 's' : ''}</span>
+            <button class="vc-revision-btn" data-video-id="${videoId}">▶ Revisit</button>
+            <button class="vc-group-btn" data-video-id="${videoId}" title="Add to group">⊕ Group</button>
+          </div>
+        </div>
+      </div>
+      <div class="vc-timeline-row">
+        <div class="vc-track">
+          ${buildTimeline(bookmarks)}
+        </div>
+      </div>
+      <div class="vc-chapters-label">Bookmarks</div>
+      <div class="vc-chapters">
+        ${bookmarks.map(b => {
+          const c        = b.color || '#14B8A6';
+          const hasNotes = b.notes && b.notes.trim();
+          return `
+            <div class="vc-chapter" data-bookmark-id="${b.id}" data-video-id="${videoId}" style="--bm-color:${c}">
+              <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+              <span class="vc-dot-sm" style="background:${c}"></span>
+              <span class="vc-time" style="color:${c}">${formatTimestamp(b.timestamp)}</span>
+              <span class="vc-desc">${b.description || 'No note added.'}</span>
+              ${b.tags && b.tags.length
+                ? `<div class="vc-tags">${b.tags.map(t =>
+                    `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+                  ).join('')}</div>`
+                : '<div class="vc-tags"></div>'}
+              <div class="vc-actions">
+                <button class="vc-notes-btn btn-icon${hasNotes ? ' vc-notes-btn--has-notes' : ''}" data-bookmark-id="${b.id}" data-video-id="${videoId}" title="Extended notes${hasNotes ? ' (has notes)' : ''}">📝</button>
+                <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
+                <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
+                <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
+              </div>
             </div>
-          </div>
-        </div>
-        <div class="vc-timeline-row">
-          <div class="vc-track">
-            ${buildTimeline(bookmarks)}
-          </div>
-        </div>
-        <div class="vc-chapters-label">Bookmarks</div>
-        <div class="vc-chapters">
-          ${bookmarks.map(b => {
-            const c = b.color || '#14B8A6';
-            return `
-              <div class="vc-chapter" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-                <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-                <span class="vc-dot-sm" style="background:${c}"></span>
-                <span class="vc-time" style="color:${c}">${formatTimestamp(b.timestamp)}</span>
-                <span class="vc-desc">${b.description || 'No note added.'}</span>
-                ${b.tags && b.tags.length
-                  ? `<div class="vc-tags">${b.tags.map(t =>
-                      `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
-                    ).join('')}</div>`
-                  : '<div class="vc-tags"></div>'}
-                <div class="vc-actions">
-                  <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
-                  <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
-                  <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
-                </div>
-              </div>`;
-          }).join('')}
-        </div>`;
-    }
+            <div class="vc-notes-panel" id="notes-${b.id}" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+              <textarea class="vc-notes-textarea" placeholder="Add a longer note, context, or key insight…" rows="2">${b.notes || ''}</textarea>
+              <div class="vc-notes-hint">Ctrl+Enter to save · Esc to close</div>
+            </div>`;
+        }).join('')}
+      </div>`;
 
     container.appendChild(card);
   });
 
   attachEventListeners();
+}
+
+// ─── Analytics View (Pro) ─────────────────────────────────────────────────────
+async function renderAnalyticsView(container) {
+  const isPro = await checkPro();
+  if (!isPro) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📊</div>
+        <h3>Analytics — Pro Feature</h3>
+        <p>See which topics you save most, activity over time, and tag insights — all from your local data.</p>
+        <a href="https://clipmark-chi.vercel.app/upgrade" target="_blank" class="analytics-upgrade-btn">✦ Upgrade to Pro</a>
+      </div>`;
+    return;
+  }
+
+  const bookmarks = allBookmarks;
+
+  // Build tag map
+  const tagMap = {};
+  bookmarks.forEach(b => {
+    (b.tags || []).forEach(t => {
+      if (!tagMap[t]) tagMap[t] = { count: 0, videos: new Set() };
+      tagMap[t].count++;
+      tagMap[t].videos.add(b.videoId);
+    });
+  });
+  const sortedTags = Object.entries(tagMap).sort((a, b) => b[1].count - a[1].count);
+  const maxCount   = sortedTags[0]?.[1].count || 1;
+
+  // Build heatmap (last 14 days)
+  const dayMap = {};
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dayMap[d.toDateString()] = 0;
+  }
+  bookmarks.forEach(b => {
+    const d = new Date(b.createdAt || b.id).toDateString();
+    if (d in dayMap) dayMap[d]++;
+  });
+  const maxDay = Math.max(...Object.values(dayMap), 1);
+
+  const heatmapHtml = Object.entries(dayMap).map(([day, count]) => {
+    const opacity = count === 0 ? 0.08 : 0.18 + (count / maxDay) * 0.82;
+    const d       = new Date(day);
+    const label   = d.toLocaleDateString('default', { month: 'short', day: 'numeric' });
+    return `<div class="heatmap-cell" style="--hm-opacity:${opacity}" title="${label}: ${count} bookmark${count !== 1 ? 's' : ''}">
+      <span class="heatmap-date">${d.getDate()}</span>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="analytics-wrap">
+      <div class="analytics-section">
+        <h3 class="analytics-section-title">Activity <span class="analytics-sub">last 14 days</span></h3>
+        <div class="heatmap-row">${heatmapHtml}</div>
+      </div>
+      <div class="analytics-section">
+        <h3 class="analytics-section-title">Tag Breakdown <span class="analytics-sub">${sortedTags.length} unique tag${sortedTags.length !== 1 ? 's' : ''}</span></h3>
+        ${sortedTags.length === 0
+          ? '<p class="analytics-empty">No tagged bookmarks yet. Add #tags to your notes to see insights here.</p>'
+          : `<div class="analytics-grid">
+              ${sortedTags.map(([tag, data]) => {
+                const color = getTagColor([tag]);
+                const pct   = ((data.count / maxCount) * 100).toFixed(0);
+                const vids  = data.videos.size;
+                return `
+                  <div class="analytics-card" style="--ac-color:${color}">
+                    <div class="analytics-tag" style="color:${color}">#${tag}</div>
+                    <div class="analytics-count">${data.count}</div>
+                    <div class="analytics-bar-track">
+                      <div class="analytics-bar" style="width:${pct}%;background:${color}"></div>
+                    </div>
+                    <div class="analytics-meta">${vids} video${vids !== 1 ? 's' : ''}</div>
+                  </div>`;
+              }).join('')}
+            </div>`}
+      </div>
+    </div>`;
 }
 
 // ─── Timeline view ────────────────────────────────────────────────────────────
@@ -255,8 +485,8 @@ function renderTimelineView(bookmarks, container) {
   const groups = [];
   let currentKey = null;
   sorted.forEach(b => {
-    const d   = new Date(b.createdAt || 0);
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const d     = new Date(b.createdAt || 0);
+    const key   = `${d.getFullYear()}-${d.getMonth()}`;
     const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
     if (key !== currentKey) { groups.push({ label, items: [] }); currentKey = key; }
     groups[groups.length - 1].items.push(b);
@@ -269,12 +499,13 @@ function renderTimelineView(bookmarks, container) {
   groups.forEach(({ label, items }) => {
     const period = document.createElement('div');
     period.className = 'tl-period';
-    period.innerHTML = `<span class="tl-period-label">${label}</span>`;
+    period.innerHTML = `<span class="tl-period-label">${label} <span class="tl-period-count">· ${items.length} bookmark${items.length !== 1 ? 's' : ''}</span></span>`;
     wrap.appendChild(period);
 
     items.forEach(b => {
-      const side  = idx % 2 === 0 ? 'tl-left' : 'tl-right';
-      const color = b.color || getTagColor(b.tags);
+      const side     = idx % 2 === 0 ? 'tl-left' : 'tl-right';
+      const color    = b.color || getTagColor(b.tags);
+      const thumb    = `https://img.youtube.com/vi/${b.videoId}/mqdefault.jpg`;
       const tagsHtml = b.tags?.length
         ? `<div class="tl-tags">${b.tags.map(t =>
             `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
@@ -282,7 +513,8 @@ function renderTimelineView(bookmarks, container) {
         : '';
 
       const cardHtml = `
-        <div class="tl-card">
+        <div class="tl-card" style="--tl-idx:${idx}">
+          <img class="tl-thumb" src="${thumb}" loading="lazy" alt="">
           <div class="tl-ts" style="color:${color}">${formatTimestamp(b.timestamp)}</div>
           <div class="tl-video" title="${b.videoTitle || ''}">${b.videoTitle || 'Unknown video'}</div>
           <div class="tl-desc">${b.description || 'No note added.'}</div>
@@ -309,25 +541,42 @@ function renderTimelineView(bookmarks, container) {
   });
 
   container.appendChild(wrap);
-
   attachEventListeners();
 }
 
 function updateBulkDeleteBtn() {
-  const btn = document.getElementById('bulk-delete-btn');
+  const row = document.getElementById('toolbar-row-2');
   const cnt = document.getElementById('bulk-count');
-  if (!btn) return;
+  if (!row) return;
   if (selectedIds.size > 0) {
-    btn.style.display = '';
+    row.style.display = 'flex';
     cnt.textContent = selectedIds.size;
   } else {
-    btn.style.display = 'none';
+    row.style.display = 'none';
   }
 }
 
+function updateSaveFilterBtn() {
+  const btn = document.getElementById('save-filter-btn');
+  if (btn) btn.style.display = filterQuery ? '' : 'none';
+}
+
 function attachEventListeners() {
+  document.querySelectorAll('.vc-group-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      showGroupPicker(btn.dataset.videoId, btn);
+    });
+  });
+
   document.querySelectorAll('.vc-revision-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
+      const isPro = await checkPro();
+      if (!isPro) {
+        showToast('▶ Revisit Mode is a Pro feature. Upgrade to Clipmark Pro to unlock it.', 'error');
+        window.open('https://clipmark-chi.vercel.app/upgrade', '_blank');
+        return;
+      }
       const videoId   = btn.dataset.videoId;
       const bookmarks = allBookmarks
         .filter(b => b.videoId === videoId)
@@ -386,6 +635,61 @@ function attachEventListeners() {
       }
     });
   });
+
+  // ── Notes button (Pro) ────────────────────────────────────────────────────
+  document.querySelectorAll('.vc-notes-btn').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const isPro = await checkPro();
+      if (!isPro) {
+        showToast('✦ Extended Notes is a Pro feature. Upgrade to Clipmark Pro.');
+        return;
+      }
+      const bookmarkId = btn.dataset.bookmarkId;
+      const panel      = document.getElementById(`notes-${bookmarkId}`);
+      if (!panel) return;
+      const isOpen = panel.classList.contains('vc-notes-panel--open');
+      document.querySelectorAll('.vc-notes-panel--open').forEach(p => p.classList.remove('vc-notes-panel--open'));
+      if (!isOpen) {
+        panel.classList.add('vc-notes-panel--open');
+        const ta = panel.querySelector('.vc-notes-textarea');
+        if (ta) {
+          ta.focus();
+          ta.style.height = 'auto';
+          ta.style.height = ta.scrollHeight + 'px';
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll('.vc-notes-textarea').forEach(ta => {
+    const panel      = ta.closest('.vc-notes-panel');
+    const bookmarkId = parseInt(panel.dataset.bookmarkId);
+    const videoId    = panel.dataset.videoId;
+
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+    });
+
+    const saveNotes = async () => {
+      const notes = ta.value;
+      try {
+        await updateBookmark(videoId, bookmarkId, { notes });
+        const bm = allBookmarks.find(b => b.id === bookmarkId);
+        if (bm) bm.notes = notes;
+        showToast('Notes saved', 'success');
+      } catch {
+        showToast('Failed to save notes');
+      }
+    };
+
+    ta.addEventListener('blur', saveNotes);
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); ta.blur(); }
+      if (e.key === 'Escape') { panel.classList.remove('vc-notes-panel--open'); }
+    });
+  });
 }
 
 function jumpToVideo(videoId, timestamp) {
@@ -404,19 +708,20 @@ function downloadFile(content, filename, mimeType) {
 }
 
 function exportJSON() {
-  const data = JSON.stringify(allBookmarks, null, 2);
-  downloadFile(data, 'bookmarks.json', 'application/json');
+  downloadFile(JSON.stringify(allBookmarks, null, 2), 'clipmark-bookmarks.json', 'application/json');
 }
 
 function exportCSV() {
-  const header = 'Video ID,Video Title,Timestamp,Description,Tags,Created At\n';
+  const header = 'Video ID,Video Title,Timestamp,Description,Tags,Notes,Created At\n';
   const rows   = allBookmarks.map(b =>
     [b.videoId, b.videoTitle || '', formatTimestamp(b.timestamp),
      (b.description || '').replace(/"/g, '""'),
-     (b.tags || []).join(' '), b.createdAt]
+     (b.tags || []).join(' '),
+     (b.notes || '').replace(/"/g, '""'),
+     b.createdAt]
     .map(v => `"${v}"`).join(',')
   ).join('\n');
-  downloadFile(header + rows, 'bookmarks.csv', 'text/csv');
+  downloadFile(header + rows, 'clipmark-bookmarks.csv', 'text/csv');
 }
 
 function exportMarkdown() {
@@ -424,7 +729,7 @@ function exportMarkdown() {
   allBookmarks.forEach(b => { videoTitles[b.videoId] = b.videoTitle || b.videoId; });
 
   const groups = groupByVideo(allBookmarks);
-  const lines  = ['# YouTube Bookmarks\n'];
+  const lines  = ['# Clipmark Bookmarks\n'];
 
   for (const [videoId, bookmarks] of Object.entries(groups)) {
     const title = videoTitles[videoId] || videoId;
@@ -433,11 +738,75 @@ function exportMarkdown() {
       const tagStr = b.tags && b.tags.length ? ` ${b.tags.map(t => `#${t}`).join(' ')}` : '';
       const url    = `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(b.timestamp)}`;
       lines.push(`- [${formatTimestamp(b.timestamp)}](${url}) — ${b.description || 'No description'}${tagStr}`);
+      if (b.notes && b.notes.trim()) lines.push(`  > ${b.notes.replace(/\n/g, '\n  > ')}`);
     });
     lines.push('');
   }
 
-  downloadFile(lines.join('\n'), 'bookmarks.md', 'text/markdown');
+  downloadFile(lines.join('\n'), 'clipmark-bookmarks.md', 'text/markdown');
+}
+
+async function exportObsidian() {
+  const isPro = await checkPro();
+  if (!isPro) { showToast('✦ Obsidian export is a Pro feature. Upgrade to Clipmark Pro.'); return; }
+
+  const groups = groupByVideo(allBookmarks);
+  const lines  = ['# Clipmark Export — Obsidian\n'];
+
+  for (const [videoId, bookmarks] of Object.entries(groups)) {
+    const title = bookmarks[0].videoTitle || videoId;
+    const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    lines.push(`> [!note] [${title}](${ytUrl})\n`);
+    bookmarks.sort((a, b) => a.timestamp - b.timestamp).forEach(b => {
+      const url    = `${ytUrl}&t=${Math.floor(b.timestamp)}`;
+      const tagStr = b.tags?.length ? ` ${b.tags.map(t => `#${t}`).join(' ')}` : '';
+      lines.push(`> - [${formatTimestamp(b.timestamp)}](${url}) — ${b.description || 'No note'}${tagStr}`);
+      if (b.notes?.trim()) lines.push(`>   > ${b.notes.replace(/\n/g, '\n>   > ')}`);
+    });
+    lines.push('');
+  }
+
+  downloadFile(lines.join('\n'), 'clipmark-obsidian.md', 'text/markdown');
+}
+
+async function exportNotionCSV() {
+  const isPro = await checkPro();
+  if (!isPro) { showToast('✦ Notion CSV export is a Pro feature. Upgrade to Clipmark Pro.'); return; }
+
+  const header = 'Name,Video,URL,Tags,Notes,Date\n';
+  const rows   = allBookmarks.map(b => {
+    const url = `https://www.youtube.com/watch?v=${b.videoId}&t=${Math.floor(b.timestamp)}`;
+    return [
+      `${formatTimestamp(b.timestamp)} — ${(b.description || '').replace(/"/g, '""')}`,
+      (b.videoTitle || '').replace(/"/g, '""'),
+      url,
+      (b.tags || []).join(', '),
+      (b.notes || '').replace(/"/g, '""'),
+      b.createdAt ? new Date(b.createdAt).toISOString().split('T')[0] : '',
+    ].map(v => `"${v}"`).join(',');
+  }).join('\n');
+
+  downloadFile(header + rows, 'clipmark-notion.csv', 'text/csv');
+}
+
+async function exportReadingList() {
+  const isPro = await checkPro();
+  if (!isPro) { showToast('✦ Reading List export is a Pro feature. Upgrade to Clipmark Pro.'); return; }
+
+  const groups = groupByVideo(allBookmarks);
+  const lines  = ['Clipmark — Reading List Export', '='.repeat(40), ''];
+
+  for (const [videoId, bookmarks] of Object.entries(groups)) {
+    const title = bookmarks[0].videoTitle || videoId;
+    lines.push(`▶ ${title}`, `   https://www.youtube.com/watch?v=${videoId}`, '');
+    bookmarks.sort((a, b) => a.timestamp - b.timestamp).forEach(b => {
+      lines.push(`   ${formatTimestamp(b.timestamp)}  ${b.description || 'No note'}`);
+      if (b.notes?.trim()) lines.push(`   Note: ${b.notes}`);
+    });
+    lines.push('');
+  }
+
+  downloadFile(lines.join('\n'), 'clipmark-reading-list.txt', 'text/plain');
 }
 
 // ─── Import ───────────────────────────────────────────────────────────────────
@@ -448,7 +817,6 @@ async function importBookmarks(file) {
 
     if (!Array.isArray(imported)) throw new Error('Invalid format: expected an array');
 
-    // Deduplicate by id, then save per-video
     const existingIds = new Set(allBookmarks.map(b => b.id));
     const newOnes     = imported.filter(b => b.videoId && b.timestamp != null && !existingIds.has(b.id));
 
@@ -457,7 +825,6 @@ async function importBookmarks(file) {
       return;
     }
 
-    // Group by video and merge into sync storage
     const byVideo = {};
     newOnes.forEach(b => {
       if (!byVideo[b.videoId]) byVideo[b.videoId] = [];
@@ -483,6 +850,283 @@ async function importBookmarks(file) {
   }
 }
 
+// ─── Video Groups ─────────────────────────────────────────────────────────────
+async function getVideoGroups() {
+  return new Promise(resolve =>
+    chrome.storage.sync.get({ vgroups: [] }, r => resolve(r.vgroups))
+  );
+}
+
+async function saveVideoGroups(groups) {
+  return new Promise(resolve => chrome.storage.sync.set({ vgroups: groups }, resolve));
+}
+
+async function createGroup(name) {
+  const groups = await getVideoGroups();
+  groups.push({ id: Date.now(), name, videoIds: [], createdAt: new Date().toISOString() });
+  await saveVideoGroups(groups);
+  return groups;
+}
+
+async function deleteGroup(groupId) {
+  const groups = await getVideoGroups();
+  await saveVideoGroups(groups.filter(g => g.id !== groupId));
+}
+
+async function renameGroup(groupId, name) {
+  const groups = await getVideoGroups();
+  const g = groups.find(g => g.id === groupId);
+  if (g) { g.name = name; await saveVideoGroups(groups); }
+}
+
+async function toggleVideoInGroup(groupId, videoId) {
+  const groups = await getVideoGroups();
+  const g = groups.find(g => g.id === groupId);
+  if (!g) return;
+  const idx = g.videoIds.indexOf(videoId);
+  if (idx === -1) g.videoIds.push(videoId);
+  else g.videoIds.splice(idx, 1);
+  await saveVideoGroups(groups);
+}
+
+// ─── Group Picker (floating dropdown) ────────────────────────────────────────
+let activePicker = null;
+
+async function showGroupPicker(videoId, anchorEl) {
+  closeGroupPicker();
+  const groups = await getVideoGroups();
+
+  const picker = document.createElement('div');
+  picker.id = 'group-picker';
+  picker.className = 'group-picker';
+
+  picker.innerHTML = `
+    <div class="gp-title">Add to group</div>
+    ${groups.length === 0
+      ? '<div class="gp-empty">No groups yet</div>'
+      : groups.map(g => `
+          <label class="gp-item">
+            <input type="checkbox" class="gp-cb" data-group-id="${g.id}"
+              ${g.videoIds.includes(videoId) ? 'checked' : ''}>
+            <span class="gp-name">${g.name}</span>
+          </label>`).join('')}
+    <div class="gp-new-row">
+      <input type="text" class="gp-new-input" placeholder="New group…" maxlength="40">
+      <button class="gp-new-btn">+</button>
+    </div>`;
+
+  document.body.appendChild(picker);
+  activePicker = picker;
+
+  const rect = anchorEl.getBoundingClientRect();
+  picker.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+  picker.style.left = `${rect.left + window.scrollX}px`;
+
+  picker.querySelectorAll('.gp-cb').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      await toggleVideoInGroup(parseInt(cb.dataset.groupId), videoId);
+    });
+  });
+
+  const newInput = picker.querySelector('.gp-new-input');
+  const newBtn   = picker.querySelector('.gp-new-btn');
+  const doCreate = async () => {
+    const name = newInput.value.trim();
+    if (!name) return;
+    await createGroup(name);
+    closeGroupPicker();
+    showGroupPicker(videoId, anchorEl);
+  };
+  newBtn.addEventListener('click', doCreate);
+  newInput.addEventListener('keydown', e => { if (e.key === 'Enter') doCreate(); });
+
+  setTimeout(() => {
+    document.addEventListener('click', outsidePickerHandler);
+  }, 0);
+}
+
+function outsidePickerHandler(e) {
+  if (activePicker && !activePicker.contains(e.target)) closeGroupPicker();
+}
+
+function closeGroupPicker() {
+  if (activePicker) {
+    activePicker.remove();
+    activePicker = null;
+    document.removeEventListener('click', outsidePickerHandler);
+  }
+}
+
+// ─── Groups View ──────────────────────────────────────────────────────────────
+async function renderGroupsView() {
+  const container = document.getElementById('bookmarks-container');
+  container.innerHTML = '';
+  container.className = 'groups-view';
+
+  const groups      = await getVideoGroups();
+  const videoTitles = await getVideoTitles();
+
+  const header = document.createElement('div');
+  header.className = 'gv-header';
+  header.innerHTML = `
+    <span class="gv-header-title">My Groups</span>
+    <button class="gv-new-btn" id="gv-new-group-btn">+ New Group</button>`;
+  container.appendChild(header);
+
+  const newGroupForm = document.createElement('div');
+  newGroupForm.className = 'gv-new-form';
+  newGroupForm.style.display = 'none';
+  newGroupForm.innerHTML = `
+    <input type="text" class="gv-new-input" placeholder="Group name…" maxlength="60">
+    <button class="gv-create-btn">Create</button>
+    <button class="gv-cancel-btn">Cancel</button>`;
+  container.appendChild(newGroupForm);
+
+  header.querySelector('#gv-new-group-btn').addEventListener('click', () => {
+    newGroupForm.style.display = 'flex';
+    newGroupForm.querySelector('.gv-new-input').focus();
+  });
+  newGroupForm.querySelector('.gv-cancel-btn').addEventListener('click', () => {
+    newGroupForm.style.display = 'none';
+  });
+  newGroupForm.querySelector('.gv-create-btn').addEventListener('click', async () => {
+    const name = newGroupForm.querySelector('.gv-new-input').value.trim();
+    if (!name) return;
+    await createGroup(name);
+    renderGroupsView();
+  });
+  newGroupForm.querySelector('.gv-new-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') newGroupForm.querySelector('.gv-create-btn').click();
+    if (e.key === 'Escape') newGroupForm.querySelector('.gv-cancel-btn').click();
+  });
+
+  if (groups.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.innerHTML = `
+      <div class="empty-state-icon">⊗</div>
+      <h3>No groups yet</h3>
+      <p>Create a group and add videos to organise your bookmarks like playlists.</p>`;
+    container.appendChild(empty);
+    return;
+  }
+
+  groups.forEach((group, groupIdx) => {
+    const groupColor   = stringToColor(group.name);
+    const groupBmCount = allBookmarks.filter(b => group.videoIds.includes(b.videoId)).length;
+
+    const section = document.createElement('div');
+    section.className = 'gv-section';
+    section.style.setProperty('--gv-color', groupColor);
+
+    const videoCards = group.videoIds.map(videoId => {
+      const bookmarks = allBookmarks.filter(b => b.videoId === videoId);
+      const title     = bookmarks[0]?.videoTitle || videoTitles[videoId] || videoId;
+      const count     = bookmarks.length;
+      const thumb     = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+      const ytUrl     = `https://www.youtube.com/watch?v=${videoId}`;
+      return `
+        <div class="gv-video-card">
+          <a href="${ytUrl}" target="_blank" rel="noopener">
+            <img src="${thumb}" class="gv-thumb" loading="lazy">
+          </a>
+          <div class="gv-video-meta">
+            <a class="gv-video-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
+            <span class="gv-video-count">${count} bookmark${count !== 1 ? 's' : ''}</span>
+          </div>
+          <button class="gv-remove-video" data-group-id="${group.id}" data-video-id="${videoId}" title="Remove from group">✕</button>
+        </div>`;
+    }).join('') || '<p class="gv-no-videos">No videos in this group yet. Use ⊕ Group on a video card to add one.</p>';
+
+    section.innerHTML = `
+      <div class="gv-section-header">
+        <span class="gv-section-name" data-group-id="${group.id}">${group.name}</span>
+        <span class="gv-section-stats">${group.videoIds.length} video${group.videoIds.length !== 1 ? 's' : ''} · ${groupBmCount} bookmark${groupBmCount !== 1 ? 's' : ''}</span>
+        <div class="gv-section-actions">
+          <button class="gv-up-btn" data-idx="${groupIdx}" title="Move up" ${groupIdx === 0 ? 'disabled' : ''}>↑</button>
+          <button class="gv-down-btn" data-idx="${groupIdx}" title="Move down" ${groupIdx === groups.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="gv-rename-btn" data-group-id="${group.id}" title="Rename">✎</button>
+          <button class="gv-delete-btn" data-group-id="${group.id}" title="Delete group">🗑</button>
+        </div>
+      </div>
+      <div class="gv-videos">${videoCards}</div>`;
+
+    // Rename
+    section.querySelector('.gv-rename-btn').addEventListener('click', () => {
+      const nameEl = section.querySelector('.gv-section-name');
+      const old    = nameEl.textContent;
+      nameEl.contentEditable = 'true';
+      nameEl.focus();
+      const range = document.createRange();
+      range.selectNodeContents(nameEl);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      const done = async () => {
+        nameEl.contentEditable = 'false';
+        const newName = nameEl.textContent.trim() || old;
+        nameEl.textContent = newName;
+        await renameGroup(group.id, newName);
+      };
+      nameEl.addEventListener('blur', done, { once: true });
+      nameEl.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); nameEl.blur(); }
+        if (ev.key === 'Escape') { nameEl.textContent = old; nameEl.blur(); }
+      });
+    });
+
+    // Delete group
+    section.querySelector('.gv-delete-btn').addEventListener('click', async () => {
+      if (!confirm(`Delete group "${group.name}"?`)) return;
+      await deleteGroup(group.id);
+      renderGroupsView();
+    });
+
+    // Move up
+    section.querySelector('.gv-up-btn').addEventListener('click', async () => {
+      if (groupIdx === 0) return;
+      const all = await getVideoGroups();
+      [all[groupIdx - 1], all[groupIdx]] = [all[groupIdx], all[groupIdx - 1]];
+      await saveVideoGroups(all);
+      renderGroupsView();
+    });
+
+    // Move down
+    section.querySelector('.gv-down-btn').addEventListener('click', async () => {
+      const all = await getVideoGroups();
+      if (groupIdx >= all.length - 1) return;
+      [all[groupIdx], all[groupIdx + 1]] = [all[groupIdx + 1], all[groupIdx]];
+      await saveVideoGroups(all);
+      renderGroupsView();
+    });
+
+    // Remove video from group
+    section.querySelectorAll('.gv-remove-video').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await toggleVideoInGroup(parseInt(btn.dataset.groupId), btn.dataset.videoId);
+        renderGroupsView();
+      });
+    });
+
+    container.appendChild(section);
+  });
+}
+
+// ─── Revisit Queue badge ──────────────────────────────────────────────────────
+async function updateRevisitBadge() {
+  const badge = document.getElementById('revisit-badge');
+  if (!badge) return;
+  const result = await new Promise(resolve => chrome.storage.sync.get(null, resolve));
+  const now    = new Date();
+  let count = 0;
+  for (const [key, val] of Object.entries(result)) {
+    if (key.startsWith('rem_') && val && val.nextDue) {
+      if (new Date(val.nextDue) <= now) count++;
+    }
+  }
+  badge.textContent   = count;
+  badge.style.display = count > 0 ? '' : 'none';
+}
+
 // ─── Main load ────────────────────────────────────────────────────────────────
 async function loadAllBookmarks() {
   try {
@@ -496,19 +1140,77 @@ async function loadAllBookmarks() {
 
 // ─── View toggle ──────────────────────────────────────────────────────────────
 function updateViewToggle() {
-  document.getElementById('view-cards').classList.toggle('view-btn--active',    viewMode === 'cards');
-  document.getElementById('view-timeline').classList.toggle('view-btn--active', viewMode === 'timeline');
+  document.getElementById('view-cards').classList.toggle('view-btn--active',     viewMode === 'cards');
+  document.getElementById('view-timeline').classList.toggle('view-btn--active',  viewMode === 'timeline');
+  document.getElementById('view-groups').classList.toggle('view-btn--active',    viewMode === 'groups');
+  document.getElementById('view-analytics').classList.toggle('view-btn--active', viewMode === 'analytics');
+
+  const isGroups = viewMode === 'groups';
+  document.getElementById('search-input').style.display = isGroups ? 'none' : '';
+  document.getElementById('sort-select').style.display  = isGroups ? 'none' : '';
+}
+
+function updateDensityBtn() {
+  const btn = document.getElementById('density-btn');
+  if (!btn) return;
+  const icons = { compact: '⊠', default: '⊟', comfortable: '▤' };
+  btn.title       = `Density: ${density}`;
+  btn.textContent = icons[density] || '⊟';
+}
+
+// ─── Export popover ───────────────────────────────────────────────────────────
+let exportPopoverOpen = false;
+
+function toggleExportPopover(forceClose = false) {
+  const popover = document.getElementById('export-popover');
+  const btn     = document.getElementById('overflow-btn');
+  if (!popover) return;
+  exportPopoverOpen = forceClose ? false : !exportPopoverOpen;
+  popover.classList.toggle('export-popover--open', exportPopoverOpen);
+  if (exportPopoverOpen) {
+    const rect = btn.getBoundingClientRect();
+    popover.style.top  = `${rect.bottom + window.scrollY + 6}px`;
+    popover.style.left = `${Math.max(8, rect.right + window.scrollX - 200)}px`;
+    setTimeout(() => document.addEventListener('click', outsidePopoverHandler), 0);
+  } else {
+    document.removeEventListener('click', outsidePopoverHandler);
+  }
+}
+
+function outsidePopoverHandler(e) {
+  const popover = document.getElementById('export-popover');
+  const btn     = document.getElementById('overflow-btn');
+  if (popover && !popover.contains(e.target) && e.target !== btn) {
+    exportPopoverOpen = false;
+    popover.classList.remove('export-popover--open');
+    document.removeEventListener('click', outsidePopoverHandler);
+  }
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   updateViewToggle();
+  updateDensityBtn();
   loadAllBookmarks();
+  renderSavedFilterPills();
+  updateRevisitBadge();
 
   // Search
   document.getElementById('search-input').addEventListener('input', e => {
     filterQuery = e.target.value.trim();
+    updateSaveFilterBtn();
     renderBookmarks();
+  });
+
+  // Save filter (Pro)
+  document.getElementById('save-filter-btn').addEventListener('click', async () => {
+    const isPro = await checkPro();
+    if (!isPro) { showToast('✦ Saved Filters is a Pro feature. Upgrade to Clipmark Pro.'); return; }
+    const name = prompt('Name this filter:', filterQuery);
+    if (!name || !name.trim()) return;
+    await saveSavedSearch(name.trim(), filterQuery, sortOrder);
+    await renderSavedFilterPills();
+    showToast('Filter saved!', 'success');
   });
 
   // Sort
@@ -539,32 +1241,76 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // View toggle
+  // View toggles
   document.getElementById('view-cards').addEventListener('click', () => {
-    viewMode = 'cards';
-    localStorage.setItem('bm_viewMode', viewMode);
-    updateViewToggle();
-    renderBookmarks();
+    viewMode = 'cards'; localStorage.setItem('bm_viewMode', viewMode);
+    updateViewToggle(); renderBookmarks();
   });
   document.getElementById('view-timeline').addEventListener('click', () => {
-    viewMode = 'timeline';
-    localStorage.setItem('bm_viewMode', viewMode);
-    updateViewToggle();
+    viewMode = 'timeline'; localStorage.setItem('bm_viewMode', viewMode);
+    updateViewToggle(); renderBookmarks();
+  });
+  document.getElementById('view-groups').addEventListener('click', () => {
+    viewMode = 'groups'; localStorage.setItem('bm_viewMode', viewMode);
+    updateViewToggle(); renderBookmarks();
+  });
+  document.getElementById('view-analytics').addEventListener('click', () => {
+    viewMode = 'analytics'; localStorage.setItem('bm_viewMode', viewMode);
+    updateViewToggle(); renderBookmarks();
+  });
+
+  // Density toggle
+  document.getElementById('density-btn').addEventListener('click', () => {
+    const cycle = { compact: 'default', default: 'comfortable', comfortable: 'compact' };
+    density = cycle[density] || 'default';
+    localStorage.setItem('bm_density', density);
+    updateDensityBtn();
     renderBookmarks();
   });
 
-  // Export buttons
-  document.getElementById('export-json').addEventListener('click', exportJSON);
-  document.getElementById('export-csv').addEventListener('click', exportCSV);
-  document.getElementById('export-md').addEventListener('click', exportMarkdown);
+  // Overflow / export popover
+  document.getElementById('overflow-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    toggleExportPopover();
+  });
+
+  // Export buttons (all close popover after click)
+  const withClose = fn => () => { fn(); toggleExportPopover(true); };
+  document.getElementById('export-json').addEventListener('click', withClose(exportJSON));
+  document.getElementById('export-csv').addEventListener('click',  withClose(exportCSV));
+  document.getElementById('export-md').addEventListener('click',   withClose(exportMarkdown));
+  document.getElementById('export-obsidian').addEventListener('click',   () => { exportObsidian(); toggleExportPopover(true); });
+  document.getElementById('export-notion-csv').addEventListener('click', () => { exportNotionCSV(); toggleExportPopover(true); });
+  document.getElementById('export-reading').addEventListener('click',    () => { exportReadingList(); toggleExportPopover(true); });
 
   // Import
   const importInput = document.getElementById('import-input');
-  document.getElementById('import-btn').addEventListener('click', () => importInput.click());
+  document.getElementById('import-btn').addEventListener('click', () => {
+    importInput.click();
+    toggleExportPopover(true);
+  });
   importInput.addEventListener('change', e => {
     if (e.target.files[0]) {
       importBookmarks(e.target.files[0]);
-      importInput.value = ''; // reset so same file can be re-imported if needed
+      importInput.value = '';
     }
+  });
+
+  // Subnav — All Bookmarks
+  document.getElementById('subnav-all').addEventListener('click', () => {
+    document.querySelectorAll('.subnav-link').forEach(l => l.classList.remove('subnav-link--active'));
+    document.getElementById('subnav-all').classList.add('subnav-link--active');
+    if (viewMode === 'revisit') {
+      viewMode = localStorage.getItem('bm_viewMode') || 'cards';
+    }
+    updateViewToggle();
+    renderBookmarks();
+  });
+
+  // Subnav — Revisit Queue (shows all bookmarks, highlights the subnav tab for now)
+  document.getElementById('subnav-revisit').addEventListener('click', () => {
+    document.querySelectorAll('.subnav-link').forEach(l => l.classList.remove('subnav-link--active'));
+    document.getElementById('subnav-revisit').classList.add('subnav-link--active');
+    renderBookmarks();
   });
 });

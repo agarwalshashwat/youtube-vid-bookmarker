@@ -2,15 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Bookmarker</title>
+  <title>Clipmark</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- Onboarding Tour Overlay -->
+<div id="onboarding-overlay" class="onboarding-overlay" style="display:none;">
+  <div class="onboarding-card">
+    <div class="onboarding-steps">
+      <div class="onboarding-step" id="onb-step-1">
+        <div class="onboarding-step-num">1 of 3</div>
+        <div class="onboarding-icon">▶</div>
+        <h2 class="onboarding-title">Open a YouTube video</h2>
+        <p class="onboarding-desc">Head to any YouTube video you want to learn from or revisit later.</p>
+        <button class="onboarding-next-btn" id="onb-next-1">Next →</button>
+      </div>
+      <div class="onboarding-step" id="onb-step-2" style="display:none;">
+        <div class="onboarding-step-num">2 of 3</div>
+        <div class="onboarding-icon">⚡</div>
+        <h2 class="onboarding-title">Press <kbd>Alt+S</kbd> to save</h2>
+        <p class="onboarding-desc">Hit <strong>Alt+S</strong> at any moment to silently bookmark it — no popup needed. Or click "Save Moment" here.</p>
+        <button class="onboarding-next-btn" id="onb-next-2">Next →</button>
+      </div>
+      <div class="onboarding-step" id="onb-step-3" style="display:none;">
+        <div class="onboarding-step-num">3 of 3</div>
+        <div class="onboarding-icon">🔖</div>
+        <h2 class="onboarding-title">See your bookmarks</h2>
+        <p class="onboarding-desc">Your saved moments appear here. Click any to jump back. Open the dashboard to see all videos.</p>
+        <button class="onboarding-next-btn onboarding-done-btn" id="onb-done">Let's go! ✓</button>
+      </div>
+    </div>
+    <button class="onboarding-skip" id="onb-skip">Skip</button>
+  </div>
+</div>
+
 <div class="popup-root">
 
   <div class="popup-header">
     <div class="popup-logo">
-      <span class="popup-logo-icon">▶</span>
+      <img src="clipmark-logo.png" class="popup-logo-icon" alt="Clipmark">
       <span class="popup-logo-text">Clipmark</span>
     </div>
     <div class="popup-header-actions">
@@ -25,6 +55,12 @@
         </svg>
       </button>
       <div id="user-chip" class="user-chip" style="display:none"></div>
+      <button id="signout-btn" class="signout-btn" title="Sign out" style="display:none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+      <button id="upgrade-btn" class="upgrade-btn" title="Upgrade to Clipmark Pro">✦ Pro</button>
     </div>
   </div>
 
@@ -40,6 +76,8 @@
   <div id="bookmark-list">
     <div class="loading-spinner" style="display:none;">Loading…</div>
   </div>
+
+  <div id="revisit-reminder-panel" class="revisit-reminder-panel"></div>
 
   <div id="social-panel" class="social-panel" style="display:none;">
     <div class="social-panel-header">
@@ -71,7 +109,7 @@
   <div class="popup-footer">
     <div class="description-row">
       <input type="text" id="description" placeholder="Add a note or tag this moment (#important)">
-      <button id="auto-fill-btn" class="auto-fill-btn" title="Auto-fill from video transcript">✦ Auto</button>
+      <button id="auto-fill-btn" class="auto-fill-btn" title="Auto-fill from video transcript (uses AI)">✦ Auto</button>
     </div>
     <div class="quick-tags">
       <button class="quick-tag-btn" data-tag="important">#important</button>
@@ -80,7 +118,7 @@
       <button class="quick-tag-btn" data-tag="idea">#idea</button>
     </div>
     <div id="tag-suggestions" class="tag-suggestions" style="display:none;"></div>
-    <button id="add-bookmark">Save Moment</button>
+    <button id="add-bookmark" title="Save bookmark at current timestamp (or press Alt+S for silent save)">Save Moment <span class="shortcut-hint">Alt+S</span></button>
   </div>
 
   <div id="error-message" class="error-message"></div>

@@ -58,3 +58,4 @@ webapp/.env
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+deep-research-*

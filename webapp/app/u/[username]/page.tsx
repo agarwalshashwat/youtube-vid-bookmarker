@@ -32,9 +32,9 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { username } = await params;
   const profile = await getProfile(username);
-  if (!profile) return { title: 'User not found — Bookmarker' };
+  if (!profile) return { title: 'User not found — Clipmark' };
   return {
-    title: `@${username} — Bookmarker`,
+    title: `@${username} — Clipmark`,
     description: `Bookmark collections by @${username}`,
   };
 }
@@ -53,7 +53,7 @@ export default async function UserProfilePage(
       <nav className={styles.nav}>
         <a href="/" className={styles.navLogo}>
           <span className={styles.logoIcon}>▶</span>
-          <span className={styles.logoText}>Bookmarker</span>
+          <span className={styles.logoText}>Clipmark</span>
         </a>
       </nav>
 
@@ -103,7 +103,7 @@ export default async function UserProfilePage(
       )}
 
       <footer className={styles.footer}>
-        <a href="/">Bookmarker</a>
+        <a href="/">Clipmark</a>
       </footer>
     </div>
   );

@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { supabase, type Bookmark } from '@/lib/supabase';
+
+const FREE_SHARE_LIMIT = 5;
+
+// Service-role client for Pro + collection-count checks (bypasses RLS)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
 
 // Handle preflight CORS requests from the extension
 export async function OPTIONS() {
@@ -23,6 +32,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Free-tier limit check ────────────────────────────────────────────────
+    if (userId) {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('is_pro')
+        .eq('id', userId)
+        .single();
+
+      const isPro = profile?.is_pro === true;
+
+      if (!isPro) {
+        const { count } = await supabaseAdmin
+          .from('collections')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId);
+
+        if ((count ?? 0) >= FREE_SHARE_LIMIT) {
+          return NextResponse.json(
+            {
+              error: 'free_limit_reached',
+              message: `Free plan allows ${FREE_SHARE_LIMIT} shared collections. Upgrade to Clipmark Pro for unlimited sharing.`,
+              limit: FREE_SHARE_LIMIT,
+              count,
+            },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
     // Sort bookmarks by timestamp before storing
     const sorted = [...bookmarks].sort((a, b) => a.timestamp - b.timestamp);
 
@@ -42,7 +81,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to save collection' }, { status: 500 });
     }
 
-    return NextResponse.json({ shareId: data.id }, { status: 201 });
+    // Return current collection count for free-tier nudge in the extension
+    let collectionsUsed: number | null = null;
+    if (userId) {
+      const { count } = await supabaseAdmin
+        .from('collections')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      collectionsUsed = count ?? null;
+    }
+
+    return NextResponse.json({ shareId: data.id, collectionsUsed, freeLimit: FREE_SHARE_LIMIT }, { status: 201 });
   } catch (err) {
     console.error('Unexpected error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

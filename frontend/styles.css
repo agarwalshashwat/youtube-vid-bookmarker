@@ -62,14 +62,9 @@ body {
 .popup-logo-icon {
   width: 24px;
   height: 24px;
-  background: var(--accent);
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  color: white;
+  border-radius: 6px;
   flex-shrink: 0;
+  object-fit: contain;
 }
 
 .popup-logo-text {
@@ -895,6 +890,107 @@ body {
   border-color: transparent;
 }
 
+/* ── Upgrade button (shown when signed in + free tier) ─────────────────────── */
+.upgrade-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a78bfa;
+  background: #8B5CF620;
+  border: 1px solid #8B5CF640;
+  border-radius: 20px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.upgrade-btn:hover {
+  background: #8B5CF630;
+  color: #c4b5fd;
+}
+
+/* ── Revisit Reminder Panel ─────────────────────────────────────────────────── */
+.revisit-reminder-panel {
+  padding: 0 12px;
+  margin-bottom: 2px;
+}
+.rr-active, .rr-set {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-light, rgba(20,184,166,0.08));
+  border: 1px solid var(--accent-muted, rgba(20,184,166,0.2));
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-sub, #9ca3af);
+}
+.rr-icon { font-size: 13px; }
+.rr-label { flex: 1; }
+.rr-set-label { white-space: nowrap; }
+.rr-days-input {
+  width: 44px;
+  padding: 2px 6px;
+  border: 1px solid var(--border, #374151);
+  border-radius: 5px;
+  background: var(--bg, #0a0a0f);
+  color: var(--text, #f9fafb);
+  font-size: 12px;
+  text-align: center;
+}
+.rr-days-input::-webkit-inner-spin-button { opacity: 1; }
+.rr-set-btn {
+  padding: 3px 10px;
+  background: var(--accent, #14B8A6);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rr-set-btn:hover { opacity: 0.85; }
+.rr-change {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--border, #374151);
+  border-radius: 5px;
+  color: var(--text-sub, #9ca3af);
+  font-size: 11px;
+  cursor: pointer;
+}
+.rr-change:hover { color: var(--accent, #14B8A6); border-color: var(--accent, #14B8A6); }
+.rr-clear {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #6b7280);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.rr-clear:hover { color: #f87171; }
+
+/* ── Sign-out button ────────────────────────────────────────────────────────── */
+.signout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.signout-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+}
+
 /* ── User chip (shown when signed in) ───────────────────────────────────────── */
 .user-chip {
   font-size: 11px;
@@ -912,3 +1008,195 @@ body {
 
 /* ── Shared nav-links (legacy, kept for compatibility) ───────────────────────── */
 .nav-links { display: none; }
+
+/* ── Onboarding Tour ──────────────────────────────────────────────────────────── */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 15, 30, 0.88);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.onboarding-card {
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px 20px;
+  width: 100%;
+  max-width: 340px;
+  position: relative;
+  text-align: center;
+}
+
+.onboarding-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.onboarding-step-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.onboarding-icon {
+  font-size: 36px;
+  margin: 4px 0;
+}
+
+.onboarding-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.onboarding-title kbd {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 14px;
+  font-family: monospace;
+  color: var(--accent);
+}
+
+.onboarding-desc {
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.55;
+  max-width: 260px;
+}
+
+.onboarding-desc strong {
+  color: var(--accent);
+}
+
+.onboarding-next-btn {
+  margin-top: 8px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 28px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.onboarding-next-btn:hover { opacity: 0.85; }
+
+.onboarding-done-btn {
+  background: var(--cta);
+}
+
+.onboarding-skip {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.onboarding-skip:hover { color: var(--text-sub); }
+
+/* ── Keyboard shortcut hint on Save Moment button ──────────────────────────── */
+.shortcut-hint {
+  display: inline-block;
+  background: rgba(255,255,255,0.15);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: monospace;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-left: 4px;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+
+/* ── Soft Paywall (Summary) ──────────────────────────────────────────────────── */
+.soft-paywall {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.soft-paywall-blur {
+  filter: blur(4px);
+  user-select: none;
+  pointer-events: none;
+  padding: 10px;
+  color: var(--text-sub);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.soft-paywall-blur ul {
+  margin: 6px 0 0 14px;
+}
+
+.soft-paywall-blur li {
+  margin-bottom: 3px;
+}
+
+.soft-paywall-cta {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(2px);
+  padding: 16px;
+}
+
+.soft-paywall-icon {
+  font-size: 22px;
+  color: var(--secondary);
+}
+
+.soft-paywall-cta strong {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.soft-paywall-cta p {
+  font-size: 11px;
+  color: var(--text-sub);
+  line-height: 1.4;
+  max-width: 220px;
+}
+
+.soft-paywall-btn {
+  background: var(--secondary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: opacity 0.15s;
+}
+
+.soft-paywall-btn:hover { opacity: 0.85; }

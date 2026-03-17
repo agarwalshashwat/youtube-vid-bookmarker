@@ -179,7 +179,7 @@
 .footer {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 8px;
   padding-top: 28px;
   font-size: 13px;
@@ -194,3 +194,17 @@
 }
 
 .footerLink:hover { color: #4752c4; }
+
+.footerBrand {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #9ca3af;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.12s;
+}
+
+.footerBrand:hover { color: #6b7280; }
+
+.footerBrand strong { color: #14B8A6; }

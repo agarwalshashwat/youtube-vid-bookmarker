@@ -32,11 +32,8 @@ export default async function Home({
         backdropFilter: 'blur(12px)', zIndex: 10,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{
-            width: 32, height: 32, background: '#14B8A6', borderRadius: 8,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, color: 'white', fontWeight: 700,
-          }}>▶</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/clipmark-logo.png" alt="Clipmark" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain' }} />
           <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>Clipmark</span>
         </div>
         <a
@@ -260,11 +257,8 @@ export default async function Home({
         flexWrap: 'wrap', gap: 12,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            width: 24, height: 24, background: '#14B8A6', borderRadius: 6,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, color: 'white',
-          }}>▶</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/clipmark-logo.png" alt="Clipmark" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
           <span style={{ fontSize: 13, color: '#4b5563', fontWeight: 600 }}>Clipmark</span>
         </div>
         <p style={{ fontSize: 12, color: '#374151' }}>

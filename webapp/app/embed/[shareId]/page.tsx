@@ -101,7 +101,7 @@ export default async function EmbedPage(
         </span>
         <a href="/" target="_blank" rel="noopener noreferrer"
           style={{ fontSize: 10, color: '#9ca3af', textDecoration: 'none' }}>
-          Bookmarker
+          Clipmark
         </a>
       </div>
     </div>
