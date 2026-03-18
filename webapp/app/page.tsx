@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { ThemeToggle } from './components/ThemeToggle';
 
 export default async function Home({
   searchParams,
@@ -18,17 +19,17 @@ export default async function Home({
   return (
     <main style={{
       minHeight: '100vh',
-      background: '#0a0a0f',
-      color: '#f9fafb',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif',
+      background: 'var(--bg)',
+      color: 'var(--text)',
+      fontFamily: 'var(--font)',
       WebkitFontSmoothing: 'antialiased',
     }}>
 
       {/* Nav */}
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '18px 40px', borderBottom: '1px solid #1f2937',
-        position: 'sticky', top: 0, background: '#0a0a0fdd',
+        padding: '18px 40px', borderBottom: '1px solid var(--border)',
+        position: 'sticky', top: 0, background: 'var(--nav-bg)',
         backdropFilter: 'blur(12px)', zIndex: 10,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -36,16 +37,19 @@ export default async function Home({
           <img src="/clipmark-logo.png" alt="Clipmark" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain' }} />
           <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>Clipmark</span>
         </div>
-        <a
-          href="https://chrome.google.com/webstore"
-          style={{
-            padding: '8px 18px', background: '#14B8A6', color: 'white',
-            borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none',
-            transition: 'opacity 0.15s',
-          }}
-        >
-          Add to Chrome
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ThemeToggle />
+          <a
+            href="https://chrome.google.com/webstore"
+            style={{
+              padding: '8px 18px', background: '#14B8A6', color: 'white',
+              borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none',
+              transition: 'opacity 0.15s',
+            }}
+          >
+            Add to Chrome
+          </a>
+        </div>
       </nav>
 
       {/* Hero */}
@@ -66,14 +70,14 @@ export default async function Home({
         <h1 style={{
           fontSize: 'clamp(36px, 6vw, 64px)', fontWeight: 800,
           lineHeight: 1.1, letterSpacing: '-1.5px', maxWidth: 800,
-          background: 'linear-gradient(135deg, #f9fafb 0%, #9ca3af 100%)',
+          background: 'var(--heading-gradient)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
         }}>
           Bookmark any YouTube moment.<br />Share it with the world.
         </h1>
 
         <p style={{
-          fontSize: 18, color: '#6b7280', maxWidth: 520,
+          fontSize: 18, color: 'var(--text-sub)', maxWidth: 520,
           lineHeight: 1.7, fontWeight: 400,
         }}>
           Clipmark lets you save, tag, and share timestamped moments from YouTube videos.
@@ -93,7 +97,7 @@ export default async function Home({
           <a
             href="#features"
             style={{
-              padding: '12px 28px', background: '#1f2937', color: '#d1d5db',
+              padding: '12px 28px', background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-text)',
               borderRadius: 10, fontSize: 15, fontWeight: 600, textDecoration: 'none',
             }}
           >
@@ -106,7 +110,7 @@ export default async function Home({
       <section id="features" style={{ padding: '0 24px 100px', maxWidth: 1080, margin: '0 auto' }}>
         <h2 style={{
           textAlign: 'center', fontSize: 32, fontWeight: 700,
-          letterSpacing: '-0.5px', marginBottom: 48, color: '#f3f4f6',
+          letterSpacing: '-0.5px', marginBottom: 48, color: 'var(--text)',
         }}>
           Everything you need to capture knowledge
         </h2>
@@ -175,7 +179,7 @@ export default async function Home({
             <div
               key={title}
               style={{
-                background: '#111827', border: '1px solid #1f2937',
+                background: 'var(--surface)', border: '1px solid var(--border)',
                 borderRadius: 12, padding: '24px',
               }}
             >
@@ -187,10 +191,10 @@ export default async function Home({
               }}>
                 {icon}
               </div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#f9fafb', marginBottom: 8 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
                 {title}
               </h3>
-              <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-sub)', lineHeight: 1.6 }}>
                 {desc}
               </p>
             </div>
@@ -200,11 +204,11 @@ export default async function Home({
 
       {/* Keyboard shortcuts strip */}
       <section style={{
-        background: '#111827', borderTop: '1px solid #1f2937',
-        borderBottom: '1px solid #1f2937', padding: '40px 24px',
+        background: 'var(--surface-alt)', borderTop: '1px solid var(--border)',
+        borderBottom: '1px solid var(--border)', padding: '40px 24px',
       }}>
         <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ fontSize: 13, color: '#4b5563', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 20, textTransform: 'uppercase' }}>
+          <p style={{ fontSize: 13, color: 'var(--text-sub)', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 20, textTransform: 'uppercase' }}>
             Keyboard shortcuts
           </p>
           <div style={{ display: 'flex', gap: 32, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -215,13 +219,13 @@ export default async function Home({
             ].map(({ key, label }) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <kbd style={{
-                  background: '#1f2937', border: '1px solid #374151',
+                  background: 'var(--kbd-bg)', border: '1px solid var(--kbd-border)',
                   borderRadius: 6, padding: '4px 10px', fontSize: 12,
                   fontFamily: 'monospace', color: '#14B8A6', fontWeight: 700,
                 }}>
                   {key}
                 </kbd>
-                <span style={{ fontSize: 13, color: '#9ca3af' }}>{label}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{label}</span>
               </div>
             ))}
           </div>
@@ -232,11 +236,11 @@ export default async function Home({
       <section style={{ padding: '100px 24px', textAlign: 'center' }}>
         <h2 style={{
           fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 800,
-          letterSpacing: '-1px', marginBottom: 16, color: '#f9fafb',
+          letterSpacing: '-1px', marginBottom: 16, color: 'var(--text)',
         }}>
           Start bookmarking smarter
         </h2>
-        <p style={{ fontSize: 16, color: '#6b7280', marginBottom: 32 }}>
+        <p style={{ fontSize: 16, color: 'var(--text-sub)', marginBottom: 32 }}>
           Free forever. No account needed to start.
         </p>
         <a
@@ -252,16 +256,16 @@ export default async function Home({
 
       {/* Footer */}
       <footer style={{
-        borderTop: '1px solid #1f2937', padding: '24px 40px',
+        borderTop: '1px solid var(--border)', padding: '24px 40px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexWrap: 'wrap', gap: 12,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/clipmark-logo.png" alt="Clipmark" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
-          <span style={{ fontSize: 13, color: '#4b5563', fontWeight: 600 }}>Clipmark</span>
+          <span style={{ fontSize: 13, color: 'var(--text-sub)', fontWeight: 600 }}>Clipmark</span>
         </div>
-        <p style={{ fontSize: 12, color: '#374151' }}>
+        <p style={{ fontSize: 12, color: 'var(--text-sub)' }}>
           Built for people who take YouTube seriously.
         </p>
       </footer>
