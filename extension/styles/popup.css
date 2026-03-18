@@ -1,59 +1,9 @@
-/* ── Reset ───────────────────────────────────────────────────────────────────── */
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* ══════════════════════════════════════════════════════════════════════════════
+   CLIPMARK POPUP STYLES
+   Imports shared design tokens (synced from packages/design-system)
+   ══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Design tokens (synced with shared-styles.css) ───────────────────────────── */
-:root {
-  /* Brand colors */
-  --accent:          #14B8A6;
-  --accent-hover:    #0d9488;  /* ✓ Unified */
-  --accent-light:    rgba(20, 184, 166, 0.12);
-  --secondary:       #8B5CF6;
-  --secondary-hover: #A78BFA;
-  --secondary-light: rgba(139, 92, 246, 0.12);
-  --cta:             #22C55E;
-  --cta-hover:       #16a34a;
-
-  /* Typography */
-  --font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-
-  /* Border radius */
-  --radius-sm:       6px;   /* ✓ Unified */
-  --radius:          10px;  /* ✓ Unified */
-
-  /* Light theme colors (default) */
-  --text:            #111827;
-  --text-sub:        #6b7280;
-  --text-muted:      #9ca3af;
-  --bg:              #f9fafb;
-  --bg-sub:          #ffffff;
-  --border:          #e5e7eb;
-
-  /* Elevation & Shadows */
-  --shadow-sm:       0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow:          0 2px 8px rgba(0, 0, 0, 0.1);
-  --shadow-lg:       0 4px 16px rgba(0, 0, 0, 0.12);
-  --shadow-hover:    0 6px 20px rgba(0, 0, 0, 0.15);
-}
-
-/* Dark theme */
-[data-theme="dark"] {
-  --text:            #f9fafb;
-  --text-sub:        #9ca3af;
-  --text-muted:      #6b7280;
-  --bg:              #0a0a0f;
-  --bg-sub:          #1f2937;
-  --border:          #1f2937;
-
-  /* Darker shadows for dark theme */
-  --shadow-sm:       0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow:          0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-lg:       0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-hover:    0 6px 20px rgba(0, 0, 0, 0.6);
-}
+@import url('./design-tokens.css');
 
 body {
   width: 400px;

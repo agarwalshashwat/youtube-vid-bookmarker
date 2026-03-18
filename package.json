@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A plug-and-play Chrome extension for managing YouTube video bookmarks",
   "scripts": {
+    "sync-tokens": "node scripts/sync-design-tokens.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

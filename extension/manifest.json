@@ -1,0 +1,67 @@
+{
+    "manifest_version": 3,
+    "name": "Clipmark",
+    "version": "1.0",
+    "description": "Bookmark, tag, and revisit YouTube moments with AI-powered notes and cloud sync.",
+    "permissions": ["storage", "tabs", "activeTab", "scripting"],
+    "host_permissions": [
+        "*://www.youtube.com/*",
+        "http://localhost:3000/*",
+        "https://clipmark-chi.vercel.app/*"
+    ],
+    "web_accessible_resources": [{
+      "resources": ["src/pages/bookmarks.html", "src/popup/bookmarks.js", "styles/bookmarks.css"],
+      "matches": ["<all_urls>"]
+    }],
+    "action": {
+      "default_popup": "src/pages/popup.html",
+      "default_icon": {
+        "16": "assets/icons/icon-16.png",
+        "48": "assets/icons/icon-48.png",
+        "128": "assets/icons/icon-128.png"
+      }
+    },
+    "background": {
+      "service_worker": "src/background/background.js"
+    },
+    "content_scripts": [
+      {
+        "matches": ["*://*.youtube.com/*"],
+        "js": ["src/content/content.js"],
+        "run_at": "document_end",
+        "css": []
+      }
+    ],
+    "commands": {
+      "_execute_action": {
+        "suggested_key": {
+          "default": "Alt+B"
+        },
+        "description": "Open bookmark popup"
+      },
+      "quick_save": {
+        "suggested_key": {
+          "default": "Ctrl+Shift+S",
+          "mac": "Command+Shift+S"
+        },
+        "description": "Quick save bookmark"
+      },
+      "silent_save": {
+        "suggested_key": {
+          "default": "Alt+S"
+        },
+        "description": "Silent save bookmark"
+      }
+    },
+    "icons": {
+      "16": "assets/icons/icon-16.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    },
+    "externally_connectable": {
+      "matches": [
+        "http://localhost:3000/*",
+        "https://clipmark-chi.vercel.app/*"
+      ]
+    }
+}

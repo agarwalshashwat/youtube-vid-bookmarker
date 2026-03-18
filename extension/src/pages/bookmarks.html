@@ -4,22 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bookmarks — Clipmark</title>
-    <link rel="stylesheet" href="bookmarks.css">
-    <script>
-        // Prevent flash of unstyled content - load theme immediately
-        (function() {
-            chrome.storage.local.get(['theme'], (result) => {
-                const theme = result.theme || 'light';
-                document.documentElement.setAttribute('data-theme', theme);
-            });
-        })();
-    </script>
+    <link rel="stylesheet" href="../../styles/bookmarks.css">
+    <script src="../popup/theme-loader.js"></script>
 </head>
 <body class="bookmarks-page">
 
     <div class="page-header">
         <div class="page-logo">
-            <img src="clipmark-logo.png" class="popup-logo-icon" alt="Clipmark">
+            <img src="../../assets/icons/clipmark-logo.png" class="popup-logo-icon" alt="Clipmark">
             <span class="page-title">Clipmark</span>
         </div>
         <div class="page-header-actions">
@@ -91,6 +83,6 @@
 
     <div id="error-toast"   class="error-toast"></div>
     <div id="success-toast" class="success-toast"></div>
-    <script src="bookmarks.js"></script>
+    <script src="../popup/bookmarks.js"></script>
 </body>
 </html>

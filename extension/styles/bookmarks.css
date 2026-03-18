@@ -1,40 +1,9 @@
-/* ── Design tokens (synced with shared-styles.css) ───────────────────────────── */
-:root {
-  /* Brand colors */
-  --accent:          #14B8A6;
-  --accent-hover:    #0d9488;  /* ✓ Unified */
-  --accent-light:    rgba(20, 184, 166, 0.12);
-  --secondary:       #8B5CF6;
-  --secondary-hover: #A78BFA;
-  --secondary-light: rgba(139, 92, 246, 0.12);
-  --cta:             #22C55E;
-  --cta-hover:       #16a34a;
+/* ══════════════════════════════════════════════════════════════════════════════
+   CLIPMARK BOOKMARKS PAGE STYLES
+   Imports shared design tokens (synced from packages/design-system)
+   ══════════════════════════════════════════════════════════════════════════════ */
 
-  /* Typography */
-  --font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-
-  /* Border radius */
-  --radius-sm:       6px;   /* ✓ Unified */
-  --radius:          10px;  /* ✓ Unified */
-
-  /* Light theme colors (default) */
-  --text:            #111827;
-  --text-sub:        #6b7280;
-  --text-muted:      #9ca3af;
-  --bg:              #f9fafb;
-  --bg-card:         #ffffff;
-  --border:          #e5e7eb;
-}
-
-/* Dark theme */
-[data-theme="dark"] {
-  --text:            #f9fafb;
-  --text-sub:        #9ca3af;
-  --text-muted:      #6b7280;
-  --bg:              #0a0a0f;
-  --bg-card:         #1f2937;
-  --border:          #1f2937;
-}
+@import url('./design-tokens.css');
 
 /* ── Page shell ──────────────────────────────────────────────────────────────── */
 .bookmarks-page {

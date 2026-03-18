@@ -1,0 +1,111 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CLIPMARK DESIGN SYSTEM — SHARED TOKENS
+
+   Single source of truth for design tokens shared between:
+   - Chrome Extension (/extension)
+   - Web Application (/webapp)
+
+   ⚠️  DO NOT edit tokens in individual projects!
+   ⚠️  Always edit this file and run the sync script.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* ── Brand Colors ──────────────────────────────────────────────────────────── */
+  --accent:          #14B8A6;
+  --accent-hover:    #0d9488;
+  --accent-light:    rgba(20, 184, 166, 0.12);
+
+  --secondary:       #8B5CF6;
+  --secondary-hover: #A78BFA;
+  --secondary-light: rgba(139, 92, 246, 0.12);
+
+  --cta:             #22C55E;
+  --cta-hover:       #16a34a;
+
+  /* ── Typography ────────────────────────────────────────────────────────────── */
+  --font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+
+  /* ── Border Radius ─────────────────────────────────────────────────────────── */
+  --radius:    10px;
+  --radius-sm: 6px;
+
+  /* ── Shadows ───────────────────────────────────────────────────────────────── */
+  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow:       0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg:    0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
+
+  /* ── Light Theme (default) ─────────────────────────────────────────────────── */
+  --text:         #111827;
+  --text-sub:     #6b7280;
+  --text-muted:   #9ca3af;
+
+  --bg:           #f9fafb;
+  --bg-sub:       #ffffff;
+  --bg-card:      #ffffff;  /* Card backgrounds (bookmarks page) */
+  --surface:      #ffffff;
+  --surface-alt:  #f3f4f6;
+  --border:       #e5e7eb;
+
+  --nav-bg:       rgba(249, 250, 251, 0.9);
+
+  --btn-secondary-bg:   #f3f4f6;
+  --btn-secondary-text: #374151;
+
+  --kbd-bg:     #f3f4f6;
+  --kbd-border: #e5e7eb;
+
+  --heading-gradient: linear-gradient(135deg, #111827 0%, #6b7280 100%);
+}
+
+[data-theme="dark"] {
+  --accent:       #14B8A6;
+  --accent-hover: #0d9488;
+  --accent-light: rgba(20, 184, 166, 0.12);
+
+  --text:         #f9fafb;
+  --text-sub:     #9ca3af;
+  --text-muted:   #6b7280;
+
+  --bg:           #0a0a0f;
+  --bg-sub:       #1f2937;
+  --bg-card:      #1f2937;  /* Card backgrounds (bookmarks page) */
+  --surface:      #111827;
+  --surface-alt:  #1f2937;
+  --border:       #1f2937;
+
+  --nav-bg:       rgba(10, 10, 15, 0.85);
+
+  --btn-secondary-bg:   #1f2937;
+  --btn-secondary-text: #d1d5db;
+
+  --kbd-bg:     #1f2937;
+  --kbd-border: #374151;
+
+  --heading-gradient: linear-gradient(135deg, #f9fafb 0%, #9ca3af 100%);
+}
+
+/* ── Base Styles ─────────────────────────────────────────────────────────────── */
+html, body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.2s, color 0.2s;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+}

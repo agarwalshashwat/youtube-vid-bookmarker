@@ -1,0 +1,17 @@
+{
+  "name": "@clipmark/design-system",
+  "version": "1.0.0",
+  "description": "Shared design tokens for Clipmark extension and webapp",
+  "main": "tokens.css",
+  "files": [
+    "tokens.css",
+    "README.md"
+  ],
+  "keywords": [
+    "design-system",
+    "design-tokens",
+    "css-variables"
+  ],
+  "author": "Clipmark",
+  "license": "MIT"
+}

@@ -3,16 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>Clipmark</title>
-  <link rel="stylesheet" href="styles.css">
-  <script>
-    // Prevent flash of unstyled content - load theme immediately
-    (function() {
-      chrome.storage.local.get(['theme'], (result) => {
-        const theme = result.theme || 'light';
-        document.documentElement.setAttribute('data-theme', theme);
-      });
-    })();
-  </script>
+  <link rel="stylesheet" href="../../styles/popup.css">
+  <script src="../popup/theme-loader.js"></script>
 </head>
 <body>
 <!-- Onboarding Tour Overlay -->
@@ -49,7 +41,7 @@
 
   <div class="popup-header">
     <div class="popup-logo">
-      <img src="clipmark-logo.png" class="popup-logo-icon" alt="Clipmark">
+      <img src="../../assets/icons/clipmark-logo.png" class="popup-logo-icon" alt="Clipmark">
       <span class="popup-logo-text">Clipmark</span>
     </div>
     <div class="popup-header-actions">
@@ -57,7 +49,7 @@
       <button id="share-btn" class="share-btn" title="Share bookmarks for this video">↗ Share</button>
       <button id="post-btn" class="post-btn" title="Post insights to social media (Pro)">✍ Post</button>
       <div class="popup-header-sep"></div>
-      <a href="bookmarks.html" id="view-all-bookmarks" class="all-bookmarks-link" title="All bookmarks">All</a>
+      <a href="src/pages/bookmarks.html" id="view-all-bookmarks" class="all-bookmarks-link" title="All bookmarks">All</a>
       <div class="popup-header-sep"></div>
       <button id="signin-btn" class="signin-btn" title="Sign in to sync across devices" style="display:none">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -137,6 +129,6 @@
   <div id="error-message" class="error-message"></div>
 
 </div><!-- /.popup-root -->
-<script src="popup.js"></script>
+<script src="../popup/popup.js"></script>
 </body>
 </html>
