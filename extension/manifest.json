@@ -3,7 +3,7 @@
     "name": "Clipmark",
     "version": "1.0",
     "description": "Bookmark, tag, and revisit YouTube moments with AI-powered notes and cloud sync.",
-    "permissions": ["storage", "tabs", "activeTab", "scripting"],
+    "permissions": ["storage", "tabs", "activeTab", "scripting", "contextMenus", "sidePanel"],
     "host_permissions": [
         "*://www.youtube.com/*",
         "http://localhost:3000/*",
@@ -14,7 +14,6 @@
       "matches": ["<all_urls>"]
     }],
     "action": {
-      "default_popup": "src/pages/popup.html",
       "default_icon": {
         "16": "assets/icons/icon-16.png",
         "48": "assets/icons/icon-48.png",
@@ -23,6 +22,9 @@
     },
     "background": {
       "service_worker": "src/background/background.js"
+    },
+    "side_panel": {
+      "default_path": "src/pages/side-panel.html"
     },
     "content_scripts": [
       {
@@ -33,11 +35,11 @@
       }
     ],
     "commands": {
-      "_execute_action": {
+      "silent_save": {
         "suggested_key": {
           "default": "Alt+B"
         },
-        "description": "Open bookmark popup"
+        "description": "Silent save bookmark"
       },
       "quick_save": {
         "suggested_key": {
@@ -45,12 +47,6 @@
           "mac": "Command+Shift+S"
         },
         "description": "Quick save bookmark"
-      },
-      "silent_save": {
-        "suggested_key": {
-          "default": "Alt+S"
-        },
-        "description": "Silent save bookmark"
       }
     },
     "icons": {

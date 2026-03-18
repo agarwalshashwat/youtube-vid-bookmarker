@@ -27,8 +27,8 @@ You watched a 3-hour podcast. You want a LinkedIn post and a shareable guide. Bo
 
 ### Core Bookmarking
 - **One-click save** — description is optional; auto-fills from transcript, chapter title, or "Bookmark at M:SS"
-- **Alt+S silent save** — instantly bookmark the current moment from any YouTube video
-- **Alt+B** — opens the popup
+- **Alt+B silent save** — instantly bookmark the current moment from any YouTube video
+- **Ctrl+Shift+S / Cmd+Shift+S** — quick save bookmark
 - **Player button** — bookmark icon injected into the YouTube player controls
 - **Visual progress bar markers** — colored markers appear on the YouTube seek bar; clusters when >8 bookmarks
 - **Inline edit** — click any description to edit in-place
@@ -58,6 +58,9 @@ You watched a 3-hour podcast. You want a LinkedIn post and a shareable guide. Bo
 - **Card, timeline, and groups view toggle**
 - **Bulk delete** — checkbox selection with a "Delete (N)" action
 
+### Side Panel
+- **Persistent side panel** — access bookmarks alongside any YouTube video without leaving the page
+
 ### Export & Import
 - **Export JSON / CSV / Markdown** — full backup or paste-ready timestamped links
 - **Import JSON** — merge from backup, deduplicates by ID
@@ -82,32 +85,50 @@ You watched a 3-hour podcast. You want a LinkedIn post and a shareable guide. Bo
 
 ```
 youtube-vid-bookmarker/
-├── frontend/                  # Chrome Extension (Manifest V3, vanilla JS)
-│   ├── manifest.json          # MV3 config — permissions, commands, host_permissions
-│   ├── content.js             # YouTube page: markers, keyboard shortcuts, revisit mode
-│   ├── popup.html / popup.js  # Extension popup: bookmark CRUD, AI features, auth, reminders
-│   ├── bookmarks.html / .js   # Full-page dashboard: grouped cards, timeline, groups, export/import
-│   ├── background.js          # Service worker: auth token storage, messaging
-│   ├── clipmark-logo.png      # Product logo (teal rounded-square play+bookmark icon)
-│   ├── icon-16/48/128.png     # Extension icons generated from clipmark-logo.png
-│   ├── styles.css             # Popup styles
-│   └── bookmarks.css          # Dashboard styles
+├── extension/                     # Chrome Extension (Manifest V3, vanilla JS)
+│   ├── manifest.json              # MV3 config — permissions, commands, host_permissions
+│   ├── assets/icons/              # Extension icons (16/48/128px + logo)
+│   ├── src/
+│   │   ├── background/
+│   │   │   └── background.js      # Service worker: auth token storage, messaging
+│   │   ├── content/
+│   │   │   └── content.js         # YouTube page: markers, keyboard shortcuts, revisit mode
+│   │   ├── pages/
+│   │   │   ├── popup.html         # Extension popup HTML
+│   │   │   ├── bookmarks.html     # Full-page dashboard HTML
+│   │   │   └── side-panel.html    # Side panel HTML
+│   │   └── popup/
+│   │       ├── popup.js           # Popup: bookmark CRUD, AI features, auth, reminders
+│   │       ├── bookmarks.js       # Dashboard: grouped cards, timeline, groups, export/import
+│   │       ├── side-panel.js      # Side panel logic
+│   │       └── theme-loader.js    # Theme initialization
+│   └── styles/
+│       ├── popup.css              # Popup styles
+│       ├── bookmarks.css          # Dashboard styles
+│       ├── side-panel.css         # Side panel styles
+│       └── design-tokens.css      # Shared CSS design tokens
 │
-└── webapp/                    # Next.js 14 + Supabase
-    ├── app/
-    │   ├── api/
-    │   │   ├── share/          # POST — store bookmark collection, return shareId
-    │   │   ├── bookmarks/      # PUT  — upsert per-video bookmarks (cloud sync)
-    │   │   ├── summarize/      # POST — AI summary via Claude Haiku
-    │   │   ├── suggest-tags/   # POST — AI tag suggestions via Claude Haiku
-    │   │   ├── generate-post/  # POST — AI social post via Claude Haiku
-    │   │   └── webhooks/dodo/  # POST — Dodo Payments webhook → update is_pro
-    │   ├── upgrade/            # Pricing page + Server Action checkout
-    │   ├── v/[shareId]/        # Public shared collection page
-    │   ├── embed/[shareId]/    # Embeddable iframe page
-    │   ├── u/[username]/       # Public user profile page
-    │   └── auth/               # Google OAuth callback + extension handoff
-    └── supabase-schema.sql     # DB schema: collections, user_bookmarks, profiles
+├── packages/
+│   └── design-system/             # Shared design tokens (extension + webapp)
+│
+├── webapp/                        # Next.js 14 + Supabase
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── share/             # POST — store bookmark collection, return shareId
+│   │   │   ├── bookmarks/         # PUT  — upsert per-video bookmarks (cloud sync)
+│   │   │   ├── summarize/         # POST — AI summary via Claude Haiku
+│   │   │   ├── suggest-tags/      # POST — AI tag suggestions via Claude Haiku
+│   │   │   ├── generate-post/     # POST — AI social post via Claude Haiku
+│   │   │   └── webhooks/dodo/     # POST — Dodo Payments webhook → update is_pro
+│   │   ├── upgrade/               # Pricing page + Server Action checkout
+│   │   ├── v/[shareId]/           # Public shared collection page
+│   │   ├── embed/[shareId]/       # Embeddable iframe page
+│   │   ├── u/[username]/          # Public user profile page
+│   │   └── auth/                  # Google OAuth callback + extension handoff
+│   ├── lib/
+│   │   └── supabase.ts
+│   ├── migrations/                # SQL schema migrations
+│   └── middleware.ts
 ```
 
 ---
@@ -153,7 +174,7 @@ Bookmarks are stored per-video in `chrome.storage.sync`:
 ### Load unpacked (development)
 1. Clone this repo
 2. Go to `chrome://extensions/` → enable **Developer mode**
-3. Click **Load unpacked** → select the `frontend/` directory
+3. Click **Load unpacked** → select the `extension/` directory
 
 ### Run the webapp locally
 ```bash
@@ -173,7 +194,7 @@ npm install
 npm run dev
 ```
 
-Update `API_BASE` at the top of `frontend/popup.js` to `http://localhost:3000` for local development.
+Update `API_BASE` at the top of `extension/src/popup/popup.js` to `http://localhost:3000` for local development.
 
 ---
 
@@ -181,8 +202,8 @@ Update `API_BASE` at the top of `frontend/popup.js` to `http://localhost:3000` f
 
 | Shortcut | Action |
 |----------|--------|
-| `Alt+B`  | Open popup |
-| `Alt+S`  | Silent-save bookmark at current timestamp |
+| `Alt+B`  | Silent-save bookmark at current timestamp |
+| `Ctrl+Shift+S` / `Cmd+Shift+S` | Quick save bookmark |
 
 ---
 

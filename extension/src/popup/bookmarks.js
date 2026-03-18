@@ -1346,4 +1346,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('subnav-revisit').classList.add('subnav-link--active');
     renderBookmarks();
   });
+
+  // ─── Live Sync with Side Panel ────────────────────────────────────────────────
+  // Listen for storage changes from side panel and refresh automatically
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync') {
+      console.log('[Bookmarks] Storage changed from side panel, auto-refreshing');
+      renderBookmarks();
+    }
+  });
 });

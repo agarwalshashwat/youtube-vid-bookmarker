@@ -34,11 +34,154 @@ const TAG_COLORS = {
   }
   
   function bmKey(videoId) { return `bm_${videoId}`; }
-  
+
+  // ─── Context Menu Setup ───────────────────────────────────────────────────────
+  // Create context menu items on extension install/update
+  chrome.runtime.onInstalled.addListener(() => {
+    // "Bookmark at [time]" - visible only on YouTube watch pages
+    chrome.contextMenus.create({
+      id: 'bookmark-at-time',
+      title: 'Bookmark at current time',
+      contexts: ['page'],
+      documentUrlPatterns: ['*://*.youtube.com/watch*'],
+    });
+
+    // "Bookmark Quote" - visible when text is selected
+    chrome.contextMenus.create({
+      id: 'bookmark-quote',
+      title: 'Bookmark quote',
+      contexts: ['selection'],
+      documentUrlPatterns: ['*://*.youtube.com/watch*'],
+    });
+  });
+
+  // ─── Context Menu Handler ──────────────────────────────────────────────────────
+  chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (!tab || !tab.url) return;
+
+    try {
+      // Validate YouTube watch page
+      if (!tab.url.includes('youtube.com/watch')) {
+        console.log('[ContextMenu] Not a YouTube watch page, skipping');
+        return;
+      }
+
+      const videoId = new URLSearchParams(new URL(tab.url).search).get('v');
+      if (!videoId) {
+        console.log('[ContextMenu] Could not extract video ID');
+        return;
+      }
+
+      if (info.menuItemId === 'bookmark-at-time') {
+        // Get current timestamp from content script
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          action: 'getTimestamp'
+        });
+
+        if (!response?.timestamp && response?.timestamp !== 0) {
+          throw new Error('Could not get timestamp from video');
+        }
+
+        const timestamp = response.timestamp;
+        const description = `Bookmark at ${formatTimestamp(timestamp)}`;
+
+        // Save bookmark
+        await saveContextMenuBookmark(videoId, timestamp, description, tab.id);
+
+        console.log('[ContextMenu] Saved bookmark at', formatTimestamp(timestamp));
+      }
+      else if (info.menuItemId === 'bookmark-quote') {
+        // Use selected text as description
+        const selectedText = info.selectionText || '';
+
+        // Get current timestamp
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          action: 'getTimestamp'
+        });
+
+        if (!response?.timestamp && response?.timestamp !== 0) {
+          throw new Error('Could not get timestamp from video');
+        }
+
+        const timestamp = response.timestamp;
+        const description = selectedText || `Bookmark at ${formatTimestamp(timestamp)}`;
+
+        // Save bookmark
+        await saveContextMenuBookmark(videoId, timestamp, description, tab.id);
+
+        console.log('[ContextMenu] Saved quoted bookmark:', selectedText.substring(0, 50));
+      }
+    } catch (error) {
+      console.error('[ContextMenu] Error:', error.message);
+    }
+  });
+
+  // ─── Helper: Save bookmark from context menu ───────────────────────────────────
+  async function saveContextMenuBookmark(videoId, timestamp, description, tabId) {
+    // Get existing bookmarks
+    const result = await new Promise(resolve =>
+      chrome.storage.sync.get({ [bmKey(videoId)]: [], videoTitles: {} }, resolve)
+    );
+
+    const bookmarks = result[bmKey(videoId)];
+    const videoTitles = result.videoTitles;
+
+    // Check for duplicates
+    if (bookmarks.some(b => Math.floor(b.timestamp) === Math.floor(timestamp))) {
+      console.log('[ContextMenu] Bookmark already exists at this timestamp');
+      return;
+    }
+
+    // Parse tags from description
+    const tags = parseTags(description);
+    const color = getTagColor(tags);
+
+    // Create new bookmark
+    const newBookmark = {
+      id: Date.now(),
+      videoId,
+      timestamp,
+      description,
+      tags,
+      color,
+      createdAt: new Date().toISOString(),
+      videoTitle: videoTitles[videoId] || null,
+      reviewSchedule: [1, 3, 7],
+      lastReviewed: null,
+    };
+
+    // Save to storage
+    bookmarks.push(newBookmark);
+    await new Promise((resolve, reject) => {
+      chrome.storage.sync.set({ [bmKey(videoId)]: bookmarks }, () => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve();
+      });
+    });
+
+    // Notify content script to update markers
+    try {
+      await chrome.tabs.sendMessage(tabId, { action: 'bookmarkUpdated' });
+    } catch {
+      // Content script may not be ready, that's OK
+    }
+
+    console.log('[ContextMenu] Bookmark saved successfully');
+  }
+
+  // ─── Action Click Handler ────────────────────────────────────────────────────────
+  chrome.action.onClicked.addListener(async (tab) => {
+    try {
+      await chrome.sidePanel.open({ tabId: tab.id });
+    } catch (error) {
+      console.error('Failed to open side panel:', error);
+    }
+  });
+
   // ─── Command Listeners ───────────────────────────────────────────────────────
   chrome.commands.onCommand.addListener(async (command) => {
     console.log(`Command received: ${command}`);
-    
+
     if (command === 'quick_save' || command === 'silent_save') {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab || !tab.url.includes('youtube.com/watch')) return;

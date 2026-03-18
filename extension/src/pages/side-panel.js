@@ -1,0 +1,697 @@
+// ─── API config ──────────────────────────────────────────────────────────────
+const API_BASE = 'https://clipmark-chi.vercel.app';
+
+// ─── Tag colours ────────────────────────────────────────────────────────────
+const TAG_COLORS = {
+  important: '#ff6b6b',
+  review:    '#ffa94d',
+  note:      '#74c0fc',
+  question:  '#a9e34b',
+  todo:      '#da77f2',
+  key:       '#f783ac',
+};
+
+function parseTags(description) {
+  if (!description) return [];
+  const matches = description.match(/#(\w+)/g);
+  return matches ? matches.map(t => t.slice(1).toLowerCase()) : [];
+}
+
+function stringToColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return `hsl(${Math.abs(hash) % 360}, 60%, 60%)`;
+}
+
+function getTagColor(tags) {
+  if (!tags || tags.length === 0) return '#4da1ee';
+  return TAG_COLORS[tags[0]] || stringToColor(tags[0]);
+}
+
+function formatTimestamp(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function debugLog(category, message, data = null) {
+  console.log(`[SidePanel][${category}][${new Date().toISOString()}] ${message}`, data ?? '');
+}
+
+// ─── Storage helpers ────────────────────────────────────────────────────────
+function bmKey(videoId) { return `bm_${videoId}`; }
+
+function syncGet(defaults) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.get(defaults, r => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else resolve(r);
+    });
+  });
+}
+
+function syncSet(data) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.set(data, () => {
+      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+      else resolve();
+    });
+  });
+}
+
+async function getCurrentTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab;
+}
+
+function extractVideoId(url) {
+  try {
+    return new URLSearchParams(new URL(url).search).get('v');
+  } catch {
+    return null;
+  }
+}
+
+async function getVideoBookmarks(videoId) {
+  const r = await syncGet({ [bmKey(videoId)]: [] });
+  return r[bmKey(videoId)];
+}
+
+async function saveVideoBookmarks(videoId, bookmarks) {
+  await syncSet({ [bmKey(videoId)]: bookmarks });
+  // Cloud sync: push to backend if signed in
+  try {
+    const { bmUser } = await syncGet({ bmUser: null });
+    if (bmUser?.accessToken) {
+      await fetch(`${API_BASE}/api/bookmarks`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${bmUser.accessToken}`,
+        },
+        body: JSON.stringify({ videoId, bookmarks }),
+      });
+    }
+  } catch {
+    // Best-effort cloud sync
+  }
+}
+
+async function getVideoTitles() {
+  const r = await syncGet({ videoTitles: {} });
+  return r.videoTitles;
+}
+
+// ─── Messaging ───────────────────────────────────────────────────────────────
+function sendMessageToTab(tabId, message) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, message, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message || 'Failed to communicate'));
+      } else if (response && response.error) {
+        reject(new Error(response.error));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
+async function waitForContentScript(tabId, maxRetries = 3, delay = 1000) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const r = await sendMessageToTab(tabId, { action: 'ping' });
+      if (r && r.status === 'ready') return true;
+    } catch {
+      if (i < maxRetries - 1) await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error('Content script not available. Please refresh the YouTube page.');
+}
+
+// ─── UI Helpers ────────────────────────────────────────────────────────────
+function showError(message, duration = 3000) {
+  const el = document.getElementById('error-message');
+  el.textContent = message;
+  el.style.display = 'block';
+  el.classList.add('show');
+  el.classList.remove('hide');
+  setTimeout(() => {
+    el.classList.add('hide');
+    el.classList.remove('show');
+    setTimeout(() => { el.style.display = 'none'; }, 300);
+  }, duration);
+}
+
+function showStatus(message, duration = 1500) {
+  const el = document.getElementById('status-message');
+  el.textContent = message;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ─── Bookmark Operations ──────────────────────────────────────────────────────
+async function saveBookmark(bookmark) {
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) {
+      throw new Error('Please navigate to a YouTube video first!');
+    }
+
+    await waitForContentScript(tab.id);
+
+    // Duplicate check
+    const existing = await getVideoBookmarks(bookmark.videoId);
+    if (existing.some(b => Math.floor(b.timestamp) === Math.floor(bookmark.timestamp))) {
+      showError('Bookmark already exists.');
+      return;
+    }
+
+    const videoTitles = await getVideoTitles();
+
+    // Auto-fill description if empty
+    let description = bookmark.description.trim();
+    if (!description) {
+      try {
+        const txRes = await sendMessageToTab(tab.id, {
+          action: 'getTranscriptAtTimestamp',
+          timestamp: bookmark.timestamp,
+        });
+        if (txRes?.text) description = txRes.text;
+      } catch {}
+      if (!description) {
+        try {
+          const chRes = await sendMessageToTab(tab.id, { action: 'getCurrentChapter' });
+          if (chRes?.chapter) description = chRes.chapter;
+        } catch {}
+      }
+      if (!description) description = `Bookmark at ${formatTimestamp(bookmark.timestamp)}`;
+    }
+
+    const tags = parseTags(description);
+    const color = getTagColor(tags);
+
+    const bookmarks = await getVideoBookmarks(bookmark.videoId);
+    bookmarks.push({
+      ...bookmark,
+      description,
+      tags,
+      color,
+      id: Date.now(),
+      createdAt: new Date().toISOString(),
+      videoTitle: videoTitles[bookmark.videoId] || null,
+      reviewSchedule: [1, 3, 7],
+      lastReviewed: null,
+    });
+
+    await saveVideoBookmarks(bookmark.videoId, bookmarks);
+    debugLog('Bookmarks', 'Saved bookmark', { description, tags });
+
+    // Visual feedback
+    try { await sendMessageToTab(tab.id, { action: 'showSaveFlash' }); } catch {}
+
+    document.getElementById('description').value = '';
+    document.getElementById('tag-suggestions').style.display = 'none';
+    showStatus('Bookmark saved ✓');
+
+    await loadBookmarks();
+    try { await sendMessageToTab(tab.id, { action: 'bookmarkUpdated' }); } catch {}
+  } catch (error) {
+    debugLog('Error', 'Failed to save bookmark', { error: error.message });
+    showError('Failed to save bookmark: ' + error.message);
+  }
+}
+
+async function deleteBookmark(videoId, bookmarkId) {
+  try {
+    const tab = await getCurrentTab();
+    await waitForContentScript(tab.id);
+
+    const bookmarks = await getVideoBookmarks(videoId);
+    await saveVideoBookmarks(videoId, bookmarks.filter(b => b.id !== parseInt(bookmarkId)));
+
+    await loadBookmarks();
+    try { await sendMessageToTab(tab.id, { action: 'bookmarkUpdated' }); } catch {}
+  } catch (error) {
+    showError('Failed to delete bookmark: ' + error.message);
+  }
+}
+
+async function updateBookmarkDescription(videoId, bookmarkId, newDescription) {
+  try {
+    const bookmarks = await getVideoBookmarks(videoId);
+    const updated = bookmarks.map(b => {
+      if (b.id !== parseInt(bookmarkId)) return b;
+      const tags = parseTags(newDescription);
+      const color = getTagColor(tags);
+      return { ...b, description: newDescription, tags, color };
+    });
+    await saveVideoBookmarks(videoId, updated);
+    await loadBookmarks();
+    try {
+      const tab = await getCurrentTab();
+      await sendMessageToTab(tab.id, { action: 'bookmarkUpdated' });
+    } catch {}
+  } catch (error) {
+    showError('Failed to update bookmark: ' + error.message);
+  }
+}
+
+// ─── Share Bookmarks ──────────────────────────────────────────────────────────
+async function shareBookmarks() {
+  const btn = document.getElementById('share-btn');
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) {
+      throw new Error('Please navigate to a YouTube video first!');
+    }
+
+    const videoId = extractVideoId(tab.url);
+    if (!videoId) throw new Error('Could not find video ID');
+
+    const bookmarks = await getVideoBookmarks(videoId);
+    if (bookmarks.length === 0) {
+      throw new Error('Add some bookmarks before sharing');
+    }
+
+    const videoTitles = await getVideoTitles();
+
+    btn.textContent = 'Sharing…';
+    btn.disabled = true;
+
+    const { bmUser } = await syncGet({ bmUser: null });
+    const response = await fetch(`${API_BASE}/api/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        videoId,
+        videoTitle: videoTitles[videoId] || '',
+        bookmarks,
+        userId: bmUser?.userId || null,
+      }),
+    });
+
+    if (response.status === 403) {
+      const err = await response.json().catch(() => ({}));
+      if (err.error === 'free_limit_reached') {
+        showError(`You've used all ${err.limit} free shares. ✦ Upgrade to Pro for unlimited sharing.`, 5000);
+        chrome.tabs.create({ url: `${API_BASE}/upgrade` });
+        btn.textContent = '↗ Share';
+        btn.disabled = false;
+        return null;
+      }
+    }
+
+    if (!response.ok) throw new Error('Server error');
+
+    const { shareId } = await response.json();
+    const shareUrl = `${API_BASE}/v/${shareId}`;
+
+    await navigator.clipboard.writeText(shareUrl);
+
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => {
+      btn.textContent = '↗ Share';
+      btn.disabled = false;
+    }, 2500);
+
+    return shareUrl;
+  } catch (error) {
+    debugLog('Error', 'Share failed', { error: error.message });
+    showError(error.message);
+    btn.textContent = '↗ Share';
+    btn.disabled = false;
+    return null;
+  }
+}
+
+// ─── Summarize Bookmarks ──────────────────────────────────────────────────────
+async function summarizeBookmarks() {
+  const btn = document.getElementById('summarize-btn');
+  const panel = document.getElementById('summary-panel');
+  const content = document.getElementById('summary-content');
+
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    return;
+  }
+
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) {
+      throw new Error('Please navigate to a YouTube video first!');
+    }
+
+    const videoId = extractVideoId(tab.url);
+    if (!videoId) throw new Error('Could not find video ID');
+
+    const bookmarks = await getVideoBookmarks(videoId);
+    if (bookmarks.length === 0) {
+      throw new Error('Add some bookmarks first');
+    }
+
+    const videoTitles = await getVideoTitles();
+
+    btn.textContent = '…';
+    btn.disabled = true;
+
+    const response = await fetch(`${API_BASE}/api/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookmarks,
+        videoTitle: videoTitles[videoId] || '',
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Server error');
+    }
+
+    const { summary, topics, actionItems } = await response.json();
+
+    let html = `<p class="summary-text">${summary}</p>`;
+
+    if (topics?.length) {
+      html += `<div class="summary-section"><strong>Topics</strong><ul>${
+        topics.map(t => `<li>${t}</li>`).join('')
+      }</ul></div>`;
+    }
+
+    if (actionItems?.length) {
+      html += `<div class="summary-section"><strong>Action items</strong><ul>${
+        actionItems.map(a => `<li>${a}</li>`).join('')
+      }</ul></div>`;
+    }
+
+    content.innerHTML = html;
+    panel.style.display = 'block';
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    btn.textContent = '✦ Summary';
+    btn.disabled = false;
+  }
+}
+
+// ─── Social Post Generation ───────────────────────────────────────────────────
+async function generateSocialPost(platform, shareUrl) {
+  const outputEl = document.getElementById('social-output');
+  const textareaEl = document.getElementById('social-post-text');
+  const openLink = document.getElementById('social-open-link');
+  const platformBtns = document.querySelectorAll('.social-platform-btn');
+
+  platformBtns.forEach(b => {
+    b.disabled = true;
+    b.classList.toggle('active', b.dataset.platform === platform);
+  });
+
+  outputEl.style.display = 'none';
+
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) throw new Error('Open a YouTube video first');
+
+    const videoId = extractVideoId(tab.url);
+    const bookmarks = await getVideoBookmarks(videoId);
+    if (bookmarks.length === 0) throw new Error('No bookmarks to share');
+
+    const videoTitles = await getVideoTitles();
+
+    const response = await fetch(`${API_BASE}/api/generate-post`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookmarks,
+        videoTitle: videoTitles[videoId] || '',
+        shareUrl: shareUrl || '',
+        platform,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Server error');
+    }
+
+    const { post } = await response.json();
+    textareaEl.value = post;
+
+    const encoded = encodeURIComponent(post);
+    const composeUrls = {
+      twitter:  `https://twitter.com/intent/tweet?text=${encoded}`,
+      linkedin: `https://www.linkedin.com/feed/?shareActive=true&text=${encoded}`,
+      threads:  `https://www.threads.net/intent/post?text=${encoded}`,
+    };
+    openLink.href = composeUrls[platform] || '#';
+    openLink.textContent = `Open ${platform.charAt(0).toUpperCase() + platform.slice(1)} ↗`;
+
+    outputEl.style.display = 'block';
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    platformBtns.forEach(b => { b.disabled = false; });
+  }
+}
+
+// ─── Load Bookmarks ───────────────────────────────────────────────────────────
+async function loadBookmarks() {
+  try {
+    const tab = await getCurrentTab();
+    if (!tab.url.includes('youtube.com/watch')) return;
+
+    const videoId = extractVideoId(tab.url);
+    if (!videoId) return;
+
+    // Update video title context
+    const videoTitles = await getVideoTitles();
+    const titleEl = document.querySelector('#video-title span');
+    if (titleEl && videoTitles[videoId]) {
+      titleEl.className = '';
+      titleEl.textContent = videoTitles[videoId];
+    }
+
+    // Update timestamp
+    try {
+      const response = await sendMessageToTab(tab.id, { action: 'getCurrentTime' });
+      if (response && response.currentTime !== undefined) {
+        const currentTimeEl = document.getElementById('current-time');
+        if (currentTimeEl) {
+          currentTimeEl.textContent = `⏱ ${formatTimestamp(response.currentTime)}`;
+        }
+      }
+    } catch (e) {
+      debugLog('Error', 'Could not get current time', e.message);
+    }
+
+    await waitForContentScript(tab.id);
+
+    const bookmarks = (await getVideoBookmarks(videoId))
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    const list = document.getElementById('bookmark-list');
+
+    if (bookmarks.length === 0) {
+      list.innerHTML = `
+        <div class="no-bookmarks">
+          No bookmarks yet.<br>
+          <span style="font-size:11px;color:var(--text-secondary);margin-top:8px;display:block;">Save important moments to see them here.</span>
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = bookmarks.map(b => `
+      <div class="bookmark" data-timestamp="${b.timestamp}" data-id="${b.id}" data-video-id="${videoId}" style="border-left-color: ${b.color || '#4da1ee'}">
+        <div class="bookmark-content">
+          <span class="bookmark-time" style="color:${b.color || '#4da1ee'}">${formatTimestamp(b.timestamp)}</span>
+          <span class="bookmark-desc">${b.description || 'No description'}</span>
+          ${b.tags && b.tags.length
+            ? `<div class="bookmark-tags">${b.tags.map(t =>
+                `<span class="tag-badge" style="background:${getTagColor([t])};opacity:0.8;color:white">${t}</span>`
+              ).join('')}</div>`
+            : ''}
+        </div>
+        <button class="copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" aria-label="Copy link" title="Copy link">⎘</button>
+        <button class="delete-bookmark" aria-label="Delete bookmark" title="Delete">&times;</button>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('.bookmark').forEach(el => {
+      const id = el.dataset.id;
+      const vId = el.dataset.videoId;
+      const timestamp = el.dataset.timestamp;
+
+      // Copy link
+      el.querySelector('.copy-link').addEventListener('click', async e => {
+        e.stopPropagation();
+        const url = `https://www.youtube.com/watch?v=${vId}&t=${Math.floor(parseFloat(timestamp))}`;
+        await navigator.clipboard.writeText(url);
+        showStatus('Link copied!');
+      });
+
+      // Delete
+      el.querySelector('.delete-bookmark').addEventListener('click', async e => {
+        e.stopPropagation();
+        await deleteBookmark(vId, id);
+      });
+
+      // Seek to bookmark
+      el.addEventListener('click', async e => {
+        if (e.target.classList.contains('delete-bookmark')) return;
+        try {
+          await waitForContentScript(tab.id);
+          await sendMessageToTab(tab.id, { action: 'setTimestamp', timestamp: parseFloat(timestamp) });
+        } catch (error) {
+          showError('Failed to seek: ' + error.message);
+        }
+      });
+
+      // Inline edit
+      el.querySelector('.bookmark-desc').addEventListener('click', e => {
+        e.stopPropagation();
+        const descEl = e.currentTarget;
+        const current = descEl.textContent;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'sp-input';
+        input.value = (current === 'No description' || current.startsWith('Bookmark at')) ? '' : current;
+        descEl.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const save = () => {
+          const val = input.value.trim() || `Bookmark at ${formatTimestamp(parseFloat(timestamp))}`;
+          updateBookmarkDescription(vId, id, val);
+        };
+
+        const blurHandler = () => {
+          save();
+          input.removeEventListener('blur', blurHandler);
+        };
+
+        input.addEventListener('blur', blurHandler);
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); input.removeEventListener('blur', blurHandler); save(); }
+          if (e.key === 'Escape') { input.removeEventListener('blur', blurHandler); loadBookmarks(); }
+        });
+      });
+    });
+  } catch (error) {
+    debugLog('Error', 'Failed to load bookmarks', { error: error.message });
+    showError('Failed to load bookmarks: ' + error.message);
+  }
+}
+
+// ─── Initialize ───────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  debugLog('Init', 'Side panel opened');
+
+  loadBookmarks();
+
+  // Theme toggle
+  function initTheme() {
+    chrome.storage.local.get(['theme'], (result) => {
+      const theme = result.theme || 'light';
+      document.documentElement.setAttribute('data-theme', theme);
+      updateThemeIcon(theme);
+    });
+  }
+
+  function updateThemeIcon(theme) {
+    const icon = document.querySelector('.theme-icon');
+    if (icon) {
+      icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const newTheme = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    chrome.storage.local.set({ theme: newTheme });
+    updateThemeIcon(newTheme);
+  }
+
+  initTheme();
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
+  // Quick tags
+  const descInput = document.getElementById('description');
+  document.querySelectorAll('.quick-tag-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tag = btn.dataset.tag;
+      const current = descInput.value.trim();
+      const alreadyHas = new RegExp(`#${tag}\\b`).test(current);
+      if (!alreadyHas) {
+        descInput.value = current ? `${current} #${tag}` : `#${tag}`;
+      }
+      descInput.focus();
+    });
+  });
+
+  // Buttons
+  document.getElementById('add-bookmark').addEventListener('click', async () => {
+    try {
+      const tab = await getCurrentTab();
+      if (!tab.url.includes('youtube.com/watch')) {
+        throw new Error('Please navigate to a YouTube video first!');
+      }
+
+      const videoId = extractVideoId(tab.url);
+      if (!videoId) throw new Error('Could not find a valid YouTube video ID');
+
+      await waitForContentScript(tab.id);
+      const response = await sendMessageToTab(tab.id, { action: 'getTimestamp' });
+
+      if (response && response.timestamp != null) {
+        const description = document.getElementById('description').value;
+        await saveBookmark({ videoId, timestamp: response.timestamp, description });
+        document.getElementById('description').value = '';
+      } else {
+        throw new Error('Could not get current video timestamp');
+      }
+    } catch (error) {
+      debugLog('Error', 'Failed to add bookmark', { error: error.message });
+      showError(error.message);
+    }
+  });
+
+  document.getElementById('dashboard-link').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('src/pages/bookmarks.html') });
+  });
+
+  document.getElementById('share-btn').addEventListener('click', shareBookmarks);
+
+  document.getElementById('summarize-btn').addEventListener('click', summarizeBookmarks);
+
+  document.getElementById('summary-close').addEventListener('click', () => {
+    document.getElementById('summary-panel').style.display = 'none';
+  });
+
+  document.getElementById('social-close').addEventListener('click', () => {
+    document.getElementById('social-panel').style.display = 'none';
+  });
+
+  document.querySelectorAll('.social-platform-btn').forEach(btn => {
+    btn.addEventListener('click', () => generateSocialPost(btn.dataset.platform, null));
+  });
+
+  // Watch for storage changes (real-time sync from dashboard)
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync') {
+      debugLog('Storage', 'Change detected, reloading bookmarks');
+      loadBookmarks();
+    }
+  });
+
+  // Reload bookmarks when tab changes
+  chrome.tabs.onActivated.addListener(() => {
+    debugLog('Tabs', 'Tab activated, reloading bookmarks');
+    loadBookmarks();
+  });
+});

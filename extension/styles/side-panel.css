@@ -1,0 +1,734 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SIDE PANEL STYLES - Clipmark
+   Responsive design for 300-600px resizable side panel
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@import './design-tokens.css';
+
+/* ─── RESET & BASE ─────────────────────────────────────────────────────────── */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html[data-theme="light"] {
+  --bg: #f9fafb;
+  --bg-sub: #ffffff;
+  --text: #111827;
+  --text-secondary: #6b7280;
+  --border: #e5e7eb;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] {
+  --bg: #0a0a0f;
+  --bg-sub: #1f2937;
+  --text: #f9fafb;
+  --text-secondary: #d1d5db;
+  --border: #374151;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--accent);
+  color: white;
+}
+
+/* ─── ROOT CONTAINER ───────────────────────────────────────────────────────── */
+.side-panel-root {
+  display: flex;
+  min-height: 100vh;
+  min-width: 300px;
+  overflow: hidden;
+}
+
+.side-panel-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ─── HEADER ───────────────────────────────────────────────────────────────── */
+.side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sub);
+  flex-shrink: 0;
+}
+
+.side-panel-logo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.sp-logo-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.sp-logo-text {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.side-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s;
+}
+
+.theme-toggle:hover {
+  transform: scale(1.1);
+}
+
+/* ─── STATUS MESSAGE ───────────────────────────────────────────────────────── */
+.status-message {
+  min-height: 24px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.3s;
+  background: rgba(20, 184, 166, 0.05);
+  text-align: center;
+}
+
+.status-message.show {
+  opacity: 1;
+}
+
+/* ─── VIDEO CONTEXT ────────────────────────────────────────────────────────── */
+.video-context {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(20, 184, 166, 0.05);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 50px;
+}
+
+.video-context-title {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title-shimmer {
+  display: block;
+  width: 120px;
+  height: 12px;
+  background: linear-gradient(90deg, var(--bg-sub) 0%, rgba(255,255,255,0.1) 50%, var(--bg-sub) 100%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.timestamp-pill {
+  font-size: 10px;
+  color: var(--accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── REMINDER PANEL ───────────────────────────────────────────────────────── */
+.revisit-reminder-panel {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.rr-active {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.rr-icon {
+  font-size: 12px;
+}
+
+.rr-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.rr-change, .rr-clear {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rr-change:hover, .rr-clear:hover {
+  background: var(--bg);
+  color: var(--accent);
+}
+
+/* ─── BOOKMARK INPUT SECTION ───────────────────────────────────────────────── */
+.BookmarkInputSection {
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.description-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.sp-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sub);
+  color: var(--text);
+  font-size: 12px;
+  transition: border-color 0.2s;
+}
+
+.sp-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
+}
+
+.auto-fill-btn-sp {
+  padding: 6px 8px;
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.auto-fill-btn-sp:hover {
+  background: rgba(20, 184, 166, 0.2);
+}
+
+.auto-fill-btn-sp:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quick-tags {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-tag-btn {
+  padding: 4px 8px;
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.quick-tag-btn:hover {
+  background: rgba(20, 184, 166, 0.2);
+  color: var(--accent);
+}
+
+.tag-suggestions {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.tag-suggest-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.tag-suggest-chip {
+  padding: 3px 6px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 3px;
+  color: #8b5cf6;
+  cursor: pointer;
+  font-size: 10px;
+  transition: all 0.2s;
+}
+
+.tag-suggest-chip:hover {
+  background: rgba(139, 92, 246, 0.2);
+}
+
+/* ─── PRIMARY BUTTON ───────────────────────────────────────────────────────── */
+.sp-btn-primary {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sp-btn-primary:hover {
+  background: #0d9488;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.sp-btn-primary:active {
+  transform: translateY(0);
+}
+
+.sp-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── BOOKMARK LIST ────────────────────────────────────────────────────────── */
+.sp-bookmark-list {
+  flex: 1;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.bookmark {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+  border-left: 3px solid transparent;
+}
+
+.bookmark:hover {
+  background: rgba(20, 184, 166, 0.05);
+}
+
+.bookmark-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.bookmark-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  display: block;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 2px;
+}
+
+.bookmark-desc {
+  font-size: 11px;
+  color: var(--text);
+  word-break: break-word;
+  margin-bottom: 4px;
+}
+
+.bookmark-tags {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.tag-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  color: white;
+  font-weight: 500;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+.copy-link, .delete-bookmark {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.copy-link:hover, .delete-bookmark:hover {
+  color: var(--accent);
+}
+
+.delete-bookmark {
+  font-weight: bold;
+}
+
+/* ─── FOOTER ───────────────────────────────────────────────────────────────── */
+.side-panel-footer {
+  display: flex;
+  gap: 4px;
+  padding: 10px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-sub);
+  flex-shrink: 0;
+  flex-direction: column;
+}
+
+@media (min-width: 400px) {
+  .side-panel-footer {
+    flex-direction: row;
+  }
+}
+
+/* ─── SECONDARY BUTTONS ────────────────────────────────────────────────────── */
+.sp-btn-secondary {
+  flex: 1;
+  padding: 6px 8px;
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-btn-secondary:hover {
+  background: rgba(20, 184, 166, 0.2);
+  color: var(--accent);
+}
+
+.sp-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sp-btn-mini {
+  padding: 4px 8px;
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sp-btn-mini:hover {
+  background: rgba(20, 184, 166, 0.2);
+  color: var(--accent);
+}
+
+.sp-link {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.sp-link:hover {
+  text-decoration: underline;
+}
+
+/* ─── OVERLAY PANELS ───────────────────────────────────────────────────────── */
+.summary-panel-overlay, .social-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.summary-panel-content, .social-panel-content {
+  background: var(--bg-sub);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  max-width: 85vw;
+  max-height: 85vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+}
+
+.summary-header, .social-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.summary-title, .social-title {
+  color: var(--text);
+}
+
+.overlay-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  transition: color 0.2s;
+}
+
+.overlay-close:hover {
+  color: var(--text);
+}
+
+.summary-body, .social-body {
+  padding: 12px 14px;
+  font-size: 12px;
+  max-height: calc(85vh - 50px);
+  overflow-y: auto;
+}
+
+.summary-text {
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.summary-section {
+  margin-top: 12px;
+}
+
+.summary-section strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-section ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.summary-section li {
+  padding: 4px 0 4px 16px;
+  position: relative;
+  color: var(--text);
+}
+
+.summary-section li:before {
+  content: '•';
+  position: absolute;
+  left: 8px;
+  color: var(--accent);
+}
+
+.social-platform-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.social-platform-btn {
+  padding: 6px 10px;
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.social-platform-btn:hover {
+  background: rgba(20, 184, 166, 0.2);
+  color: var(--accent);
+}
+
+.social-platform-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.social-output {
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-post-textarea {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.social-action-row {
+  display: flex;
+  gap: 6px;
+}
+
+/* ─── ERROR MESSAGE ────────────────────────────────────────────────────────── */
+.error-message {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  background: #ef4444;
+  color: white;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s;
+  pointer-events: none;
+  z-index: 999;
+}
+
+.error-message.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.error-message.hide {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* ─── SCROLLBAR ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(20, 184, 166, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.5);
+}
+
+/* ─── RESPONSIVE ───────────────────────────────────────────────────────────── */
+@media (max-width: 350px) {
+  .side-panel-logo {
+    font-size: 11px;
+  }
+
+  .sp-logo-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .quick-tags {
+    gap: 2px;
+  }
+
+  .quick-tag-btn {
+    padding: 3px 6px;
+    font-size: 9px;
+  }
+
+  .bookmark-time {
+    font-size: 10px;
+  }
+
+  .bookmark-desc {
+    font-size: 10px;
+  }
+}

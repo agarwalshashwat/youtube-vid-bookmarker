@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clipmark Bookmarks</title>
+  <link rel="stylesheet" href="../../styles/side-panel.css">
+  <script src="../popup/theme-loader.js"></script>
+</head>
+<body class="side-panel-root">
+
+<div class="side-panel-container">
+
+  <div class="side-panel-header">
+    <div class="side-panel-logo">
+      <img src="../../assets/icons/clipmark-logo.png" class="sp-logo-icon" alt="Clipmark">
+      <span class="sp-logo-text">Clipmark</span>
+    </div>
+    <div class="side-panel-header-actions">
+      <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark theme">
+        <span class="theme-icon">☀️</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="status-message" class="status-message"></div>
+
+  <div class="video-context">
+    <div class="video-context-title" id="video-title">🎬 <span class="title-shimmer"></span></div>
+    <div class="timestamp-pill" id="current-time">⏱ 00:00</div>
+  </div>
+
+  <div id="revisit-reminder-panel" class="revisit-reminder-panel"></div>
+
+  <div class="BookmarkInputSection">
+    <div class="description-row">
+      <input type="text" id="description" placeholder="Add a note…" class="sp-input">
+      <button id="auto-fill-btn" class="auto-fill-btn-sp" title="Auto-fill from transcript">✦</button>
+    </div>
+    <div class="quick-tags">
+      <button class="quick-tag-btn" data-tag="important">#important</button>
+      <button class="quick-tag-btn" data-tag="note">#note</button>
+      <button class="quick-tag-btn" data-tag="review">#review</button>
+      <button class="quick-tag-btn" data-tag="idea">#idea</button>
+    </div>
+    <div id="tag-suggestions" class="tag-suggestions" style="display:none;"></div>
+    <button id="add-bookmark" class="sp-btn-primary" title="Save bookmark (Alt+S)">Save Moment</button>
+  </div>
+
+  <div id="bookmark-list" class="sp-bookmark-list">
+    <div class="loading-spinner" style="display:none;">Loading…</div>
+  </div>
+
+  <div class="side-panel-footer">
+    <button id="dashboard-link" class="sp-btn-secondary" title="Open full dashboard">→ Dashboard</button>
+    <button id="share-btn" class="sp-btn-secondary" title="Share bookmarks">↗ Share</button>
+    <button id="summarize-btn" class="sp-btn-secondary" title="AI summary">✦ Summary</button>
+  </div>
+
+  <div id="error-message" class="error-message"></div>
+
+  <!-- Summary Panel Overlay -->
+  <div id="summary-panel" class="summary-panel-overlay" style="display:none;">
+    <div class="summary-panel-content">
+      <div class="summary-header">
+        <span class="summary-title">✦ Summary</span>
+        <button id="summary-close" class="overlay-close" title="Close">&times;</button>
+      </div>
+      <div id="summary-content" class="summary-body"></div>
+    </div>
+  </div>
+
+  <!-- Social Panel Overlay -->
+  <div id="social-panel" class="social-panel-overlay" style="display:none;">
+    <div class="social-panel-content">
+      <div class="social-header">
+        <span class="social-title">✍ Post Insights</span>
+        <button id="social-close" class="overlay-close" title="Close">&times;</button>
+      </div>
+      <div id="social-platform-row" class="social-platform-row">
+        <button class="social-platform-btn" data-platform="twitter">𝕏 Twitter</button>
+        <button class="social-platform-btn" data-platform="linkedin">in LinkedIn</button>
+        <button class="social-platform-btn" data-platform="threads">@ Threads</button>
+      </div>
+      <div id="social-output" class="social-output" style="display:none;">
+        <textarea id="social-post-text" class="social-post-textarea" readonly></textarea>
+        <div class="social-action-row">
+          <button id="social-copy-btn" class="sp-btn-mini">Copy</button>
+          <a id="social-open-link" class="sp-btn-mini sp-link" target="_blank" rel="noopener">Open ↗</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.side-panel-container -->
+
+<script src="./side-panel.js"></script>
+</body>
+</html>
