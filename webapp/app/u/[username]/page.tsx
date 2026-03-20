@@ -48,63 +48,146 @@ export default async function UserProfilePage(
 
   const collections = await getUserCollections(profile.id);
 
+  // Derive stats
+  const totalClips = collections.reduce((sum, c) => sum + (c.bookmarks?.length ?? 0), 0);
+  const totalViews = collections.reduce((sum, c) => sum + (c.view_count ?? 0), 0);
+
+  const avatarInitial = username[0].toUpperCase();
+
   return (
     <div className={styles.page}>
+
+      {/* ── Fixed glass header ── */}
       <nav className={styles.nav}>
-        <a href="/" className={styles.navLogo}>
-          <span className={styles.logoIcon}>▶</span>
-          <span className={styles.logoText}>Clipmark</span>
-        </a>
+        <div className={styles.navInner}>
+          <a href="/" className={styles.navLogo}>Clipmark</a>
+          <div className={styles.navLinks}>
+            <a href={`/u/${username}`} className={`${styles.navLink} ${styles.navLinkActive}`}>Profile</a>
+            <a href="/#features" className={styles.navLink}>Explore</a>
+            <a href="/upgrade" className={styles.navLink}>Collections</a>
+          </div>
+          <div className={styles.navActions}>
+            <button className={styles.navIconBtn} aria-label="Search">
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>search</span>
+            </button>
+            <button className={styles.navIconBtn} aria-label="Account">
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}
+              >
+                account_circle
+              </span>
+            </button>
+          </div>
+        </div>
       </nav>
 
-      <div className={styles.profile}>
-        <div className={styles.avatar}>{username[0].toUpperCase()}</div>
-        <div>
-          <h1 className={styles.username}>@{username}</h1>
-          <p className={styles.meta}>{collections.length} collection{collections.length !== 1 ? 's' : ''}</p>
-        </div>
-      </div>
+      <main className={styles.main}>
 
-      {collections.length === 0 ? (
-        <div className={styles.empty}>
-          <p>No public collections yet.</p>
-        </div>
-      ) : (
-        <div className={styles.grid}>
-          {collections.map(c => (
-            <a key={c.id} href={`/v/${c.id}`} className={styles.card}>
-              <div className={styles.cardThumb}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`https://img.youtube.com/vi/${c.video_id}/hqdefault.jpg`}
-                  alt={c.video_title ?? 'YouTube video'}
-                />
-              </div>
-              <div className={styles.cardBody}>
-                <p className={styles.cardTitle}>{c.video_title ?? 'Untitled Video'}</p>
-                <p className={styles.cardMeta}>
-                  {c.bookmarks.length} bookmark{c.bookmarks.length !== 1 ? 's' : ''}
-                  {' · '}
-                  {new Date(c.created_at).toLocaleDateString()}
-                </p>
-                {c.bookmarks.slice(0, 2).map((b, i) => (
-                  <p key={i} className={styles.cardSnippet}>
-                    <span style={{ color: b.color || '#14B8A6', fontWeight: 700, fontSize: 11 }}>
-                      {formatTimestamp(b.timestamp)}
+        {/* ── Profile hero ── */}
+        <section className={styles.hero}>
+          <div className={styles.avatarWrap}>
+            {profile.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.avatar_url} alt={username} className={styles.avatarImg} />
+            ) : (
+              <div className={styles.avatarFallback}>{avatarInitial}</div>
+            )}
+          </div>
+
+          <h1 className={styles.displayName}>{username}</h1>
+          <p className={styles.handle}>@{username}</p>
+
+          <div className={styles.stats}>
+            <div className={styles.statItem}>
+              <span className={styles.statNum}>{totalClips}</span>
+              <span className={styles.statLabel}>Clips</span>
+            </div>
+            <div className={styles.statDivider} />
+            <div className={styles.statItem}>
+              <span className={styles.statNum}>{collections.length}</span>
+              <span className={styles.statLabel}>Collections</span>
+            </div>
+            <div className={styles.statDivider} />
+            <div className={styles.statItem}>
+              <span className={styles.statNum}>{totalViews >= 1000 ? `${(totalViews / 1000).toFixed(1)}k` : totalViews}</span>
+              <span className={styles.statLabel}>Views</span>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Collections grid ── */}
+        <section className={styles.collectionsSection}>
+          <div className={styles.collectionsHeader}>
+            <h2 className={styles.collectionsHeading}>Public Collections</h2>
+            <div className={styles.sortBtns}>
+              <button className={`${styles.sortBtn} ${styles.sortBtnActive}`}>Latest</button>
+              <button className={styles.sortBtn}>Popular</button>
+            </div>
+          </div>
+
+          {collections.length === 0 ? (
+            <div className={styles.empty}>
+              <p>No public collections yet.</p>
+            </div>
+          ) : (
+            <div className={styles.grid}>
+              {collections.map(c => (
+                <a key={c.id} href={`/v/${c.id}`} className={styles.card}>
+                  <div className={styles.cardThumb}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`https://img.youtube.com/vi/${c.video_id}/hqdefault.jpg`}
+                      alt={c.video_title ?? 'YouTube video'}
+                      className={styles.cardThumbImg}
+                    />
+                    <div className={styles.cardClipCount}>
+                      {c.bookmarks?.length ?? 0} clips
+                    </div>
+                  </div>
+                  <div className={styles.cardBody}>
+                    <h3 className={styles.cardTitle}>
+                      {c.video_title ?? 'Untitled Video'}
+                    </h3>
+                    <p className={styles.cardMeta}>
+                      {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    {c.bookmarks?.slice(0, 1).map((b, i) => (
+                      <p key={i} className={styles.cardSnippet}>
+                        <span style={{ color: b.color || '#14B8A6', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}>
+                          {formatTimestamp(b.timestamp)}
+                        </span>
+                        {' '}
+                        {b.description || 'No description'}
+                      </p>
+                    ))}
+                    <span className={styles.cardExploreLink}>
+                      Explore Collection
+                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>chevron_right</span>
                     </span>
-                    {' '}
-                    {b.description || 'No description'}
-                  </p>
-                ))}
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
 
+      </main>
+
+      {/* ── Footer ── */}
       <footer className={styles.footer}>
-        <a href="/">Clipmark</a>
+        <div className={styles.footerInner}>
+          <span className={styles.footerCopy}>© 2025 Clipmark. The Digital Curator.</span>
+          <nav className={styles.footerLinks}>
+            {['Privacy', 'Terms', 'Support'].map(label => (
+              <a key={label} href={`/${label.toLowerCase()}`} className={styles.footerLink}>
+                {label}
+              </a>
+            ))}
+          </nav>
+        </div>
       </footer>
+
     </div>
   );
 }

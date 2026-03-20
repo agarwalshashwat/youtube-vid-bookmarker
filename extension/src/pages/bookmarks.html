@@ -4,86 +4,197 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bookmarks — Clipmark</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../styles/bookmarks.css">
     <script src="../popup/theme-loader.js"></script>
 </head>
 <body class="bookmarks-page">
 
-    <div class="page-header">
-        <div class="page-logo">
-            <img src="../../assets/icons/clipmark-logo.png" class="popup-logo-icon" alt="Clipmark">
-            <span class="page-title">Clipmark</span>
+    <!-- ── Fixed Glass Header ────────────────────────────────────────────── -->
+    <header class="page-header">
+        <div class="page-header-left">
+            <div class="page-logo">
+                <span class="material-symbols-outlined page-logo-icon">bookmarks</span>
+                <span class="page-title">Clipmark</span>
+            </div>
+            <nav class="page-header-nav">
+                <button class="subnav-link subnav-link--active" id="subnav-all">All Bookmarks</button>
+                <button class="subnav-link" id="subnav-revisit">
+                    Revisit Queue
+                    <span class="subnav-badge" id="revisit-badge" style="display:none">0</span>
+                </button>
+                <a class="subnav-link" href="https://clipmark-chi.vercel.app" target="_blank" rel="noopener">Shared ↗</a>
+            </nav>
         </div>
-        <div class="page-header-actions">
+        <div class="page-header-right">
+            <div class="header-search-wrap">
+                <span class="material-symbols-outlined header-search-icon">search</span>
+                <input type="text" id="search-input" placeholder="Search your stream..." class="toolbar-search header-search-input">
+            </div>
             <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark theme">
-                <span class="theme-icon">☀️</span>
+                <span class="theme-icon material-symbols-outlined">light_mode</span>
             </button>
-            <a id="dashboard-upgrade-btn" href="https://clipmark-chi.vercel.app/upgrade" target="_blank" class="dashboard-upgrade-btn">✦ Upgrade to Pro</a>
+            <a id="dashboard-upgrade-btn" href="https://clipmark-chi.vercel.app/upgrade" target="_blank" class="dashboard-upgrade-btn">✦ Upgrade</a>
         </div>
-    </div>
+    </header>
 
-    <div class="page-subnav">
-        <button class="subnav-link subnav-link--active" id="subnav-all">All Bookmarks</button>
-        <button class="subnav-link" id="subnav-revisit">Revisit Queue <span class="subnav-badge" id="revisit-badge" style="display:none">0</span></button>
-        <a class="subnav-link" href="https://clipmark-chi.vercel.app" target="_blank" rel="noopener">Shared ↗</a>
-        <span class="subnav-link-hint">💡 Changes sync instantly with side panel</span>
-    </div>
+    <!-- ── Side Navigation (desktop only) ──────────────────────────────── -->
+    <aside class="bm-side-nav">
+        <div class="side-nav-header">
+            <div class="side-nav-curator-icon">
+                <span class="material-symbols-outlined">auto_awesome</span>
+            </div>
+            <div>
+                <h3 class="side-nav-title">The Curator</h3>
+                <p class="side-nav-subtitle">Editorial Collection</p>
+            </div>
+        </div>
+        <nav class="side-nav-items">
+            <p class="side-nav-section-label">Library</p>
+            <button class="subnav-link subnav-link--active side-nav-link" id="subnav-all-side">
+                <span class="material-symbols-outlined">bookmarks</span>
+                <span>All Bookmarks</span>
+            </button>
+            <button class="subnav-link side-nav-link" id="subnav-videos-side">
+                <span class="material-symbols-outlined">video_library</span>
+                <span>Videos</span>
+            </button>
+            <button class="subnav-link side-nav-link" id="subnav-revisit-side">
+                <span class="material-symbols-outlined">schedule</span>
+                <span>Revisit Queue</span>
+                <span class="subnav-badge side-nav-badge" id="revisit-badge-side" style="display:none">0</span>
+            </button>
+            <p class="side-nav-section-label">Curations</p>
+            <button class="subnav-link side-nav-link" id="subnav-groups-side">
+                <span class="material-symbols-outlined">folder_shared</span>
+                <span>Groups</span>
+            </button>
+            <button class="subnav-link side-nav-link" id="subnav-shared-side">
+                <span class="material-symbols-outlined">ios_share</span>
+                <span>Shared</span>
+            </button>
+            <p class="side-nav-section-label">Account</p>
+            <a class="subnav-link side-nav-link side-nav-upgrade" href="https://clipmark-chi.vercel.app/upgrade" target="_blank" rel="noopener">
+                <span class="material-symbols-outlined">auto_awesome</span>
+                <span>Upgrade</span>
+            </a>
+        </nav>
+        <div class="side-nav-footer">
+            <button class="side-nav-new-btn">
+                <span class="material-symbols-outlined">add</span>
+                New Bookmark
+            </button>
+        </div>
+    </aside>
 
-    <div class="container">
+    <!-- ── Main Content ──────────────────────────────────────────────────── -->
+    <main class="bm-main">
+        <div class="bm-container">
 
-        <div class="toolbar">
-            <div class="toolbar-row-1">
-                <input type="text" id="search-input" placeholder="Search notes, titles, or timestamps..." class="toolbar-search">
-                <button id="save-filter-btn" class="toolbar-btn save-filter-btn" title="Save this search as a filter" style="display:none">⊕ Save</button>
-                <select id="sort-select" class="toolbar-sort">
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                    <option value="timestamp">By timestamp</option>
-                </select>
-                <div class="view-toggle">
-                    <button id="view-cards"     class="toolbar-btn view-btn" title="Card view">⊞</button>
-                    <button id="view-timeline"  class="toolbar-btn view-btn" title="Timeline view">⏱</button>
-                    <button id="view-groups"    class="toolbar-btn view-btn" title="Groups">⊗</button>
-                    <button id="view-analytics" class="toolbar-btn view-btn" title="Analytics">📊</button>
+            <!-- Page heading -->
+            <div class="bm-page-heading">
+                <h1 class="bm-heading">Knowledge Stream</h1>
+                <p class="bm-heading-sub">Your curated editorial journey through the web.</p>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-row-1">
+                    <div class="toolbar-search-wrap">
+                        <span class="material-symbols-outlined toolbar-search-icon">search</span>
+                        <input type="text" id="search-input-toolbar" placeholder="Search notes, titles, or timestamps..." class="toolbar-search toolbar-search--inner" style="display:none" aria-hidden="true">
+                    </div>
+                    <button id="save-filter-btn" class="toolbar-btn save-filter-btn" title="Save this search as a filter" style="display:none">⊕ Save</button>
+                    <select id="sort-select" class="toolbar-sort">
+                        <option value="newest">Newest first</option>
+                        <option value="oldest">Oldest first</option>
+                        <option value="timestamp">By timestamp</option>
+                    </select>
+                    <div class="view-toggle">
+                        <button id="view-cards"     class="toolbar-btn view-btn" title="Card view">
+                            <span class="material-symbols-outlined">grid_view</span>
+                        </button>
+                        <button id="view-timeline"  class="toolbar-btn view-btn" title="Timeline view">
+                            <span class="material-symbols-outlined">timeline</span>
+                        </button>
+                        <button id="view-groups"    class="toolbar-btn view-btn" title="Groups">
+                            <span class="material-symbols-outlined">folder_open</span>
+                        </button>
+                        <button id="view-analytics" class="toolbar-btn view-btn" title="Analytics">
+                            <span class="material-symbols-outlined">bar_chart</span>
+                        </button>
+                    </div>
+                    <button id="density-btn" class="toolbar-btn" title="Toggle density">
+                        <span class="material-symbols-outlined">density_medium</span>
+                    </button>
+                    <button id="overflow-btn" class="toolbar-btn overflow-btn" title="Export / Import">
+                        <span class="material-symbols-outlined">more_horiz</span>
+                    </button>
                 </div>
-                <button id="density-btn" class="toolbar-btn" title="Toggle density">⊟</button>
-                <button id="overflow-btn" class="toolbar-btn overflow-btn" title="Export / Import">···</button>
+                <div class="toolbar-row-2" id="toolbar-row-2">
+                    <span class="bulk-select-label"><span id="bulk-count">0</span> selected</span>
+                    <button id="bulk-delete-btn" class="toolbar-btn toolbar-btn--danger">Delete selected</button>
+                </div>
+                <div class="saved-filters-row" id="saved-filters-row"></div>
             </div>
-            <div class="toolbar-row-2" id="toolbar-row-2">
-                <span class="bulk-select-label"><span id="bulk-count">0</span> selected</span>
-                <button id="bulk-delete-btn" class="toolbar-btn toolbar-btn--danger">Delete selected</button>
+
+            <!-- Export Popover -->
+            <div id="export-popover" class="export-popover">
+                <div class="ep-section">
+                    <div class="ep-label">Export</div>
+                    <button id="export-json" class="ep-btn">↓ JSON</button>
+                    <button id="export-csv"  class="ep-btn">↓ CSV</button>
+                    <button id="export-md"   class="ep-btn">↓ Markdown</button>
+                </div>
+                <div class="ep-section">
+                    <div class="ep-label">Pro Formats <span class="ep-pro-badge">✦ Pro</span></div>
+                    <button id="export-obsidian"   class="ep-btn ep-btn--pro">↓ Obsidian</button>
+                    <button id="export-notion-csv" class="ep-btn ep-btn--pro">↓ Notion CSV</button>
+                    <button id="export-reading"    class="ep-btn ep-btn--pro">↓ Reading List</button>
+                </div>
+                <div class="ep-divider"></div>
+                <button id="import-btn" class="ep-btn ep-btn--import">↑ Import JSON</button>
+                <input type="file" id="import-input" accept=".json" style="display:none">
             </div>
-            <div class="saved-filters-row" id="saved-filters-row"></div>
+
+            <!-- Stats Bar -->
+            <div id="stats-bar" class="stats-bar"></div>
+
+            <!-- Bookmarks Container -->
+            <div id="bookmarks-container">
+                <div class="loading-spinner">Loading bookmarks…</div>
+            </div>
+
         </div>
+    </main>
 
-        <div id="export-popover" class="export-popover">
-            <div class="ep-section">
-                <div class="ep-label">Export</div>
-                <button id="export-json" class="ep-btn">↓ JSON</button>
-                <button id="export-csv"  class="ep-btn">↓ CSV</button>
-                <button id="export-md"   class="ep-btn">↓ Markdown</button>
-            </div>
-            <div class="ep-section">
-                <div class="ep-label">Pro Formats <span class="ep-pro-badge">✦ Pro</span></div>
-                <button id="export-obsidian"   class="ep-btn ep-btn--pro">↓ Obsidian</button>
-                <button id="export-notion-csv" class="ep-btn ep-btn--pro">↓ Notion CSV</button>
-                <button id="export-reading"    class="ep-btn ep-btn--pro">↓ Reading List</button>
-            </div>
-            <div class="ep-divider"></div>
-            <button id="import-btn" class="ep-btn ep-btn--import">↑ Import JSON</button>
-            <input type="file" id="import-input" accept=".json" style="display:none">
-        </div>
+    <!-- ── Mobile Bottom Nav ─────────────────────────────────────────────── -->
+    <nav class="mobile-bottom-nav">
+        <a class="mobile-nav-item mobile-nav-item--active" href="#">
+            <span class="material-symbols-outlined">bookmarks</span>
+            <span class="mobile-nav-label">Bookmarks</span>
+        </a>
+        <a class="mobile-nav-item" href="#">
+            <span class="material-symbols-outlined">history</span>
+            <span class="mobile-nav-label">Queue</span>
+        </a>
+        <a class="mobile-nav-item" href="#">
+            <span class="material-symbols-outlined">folder</span>
+            <span class="mobile-nav-label">Groups</span>
+        </a>
+        <a class="mobile-nav-item" href="https://clipmark-chi.vercel.app/upgrade" target="_blank" rel="noopener">
+            <span class="material-symbols-outlined">grade</span>
+            <span class="mobile-nav-label">Pro</span>
+        </a>
+    </nav>
 
-        <div id="stats-bar" class="stats-bar"></div>
-
-        <div id="bookmarks-container">
-            <div class="loading-spinner">Loading bookmarks…</div>
-        </div>
-
-    </div>
-
+    <!-- ── Toasts ─────────────────────────────────────────────────────────── -->
     <div id="error-toast"   class="error-toast"></div>
     <div id="success-toast" class="success-toast"></div>
+
     <script src="../popup/bookmarks.js"></script>
 </body>
 </html>

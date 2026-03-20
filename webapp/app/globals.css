@@ -8,4 +8,82 @@
 
 @import url('./design-tokens.css');
 
+/* Material Symbols config */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+  user-select: none;
+}
+
 /* Webapp-specific styles can be added below */
+
+/* ── Upgrade page classes ──────────────────────────────────────────────────── */
+.faq-card {
+  background: #ffffff;
+  border: 1px solid rgba(26,28,29,0.08);
+  border-radius: 12px;
+  padding: 24px;
+}
+.footer-link {
+  color: #545f6c;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.footer-link:hover { color: #006b5f; }
+.feature-row:hover { background: rgba(243,243,244,0.5); }
+.ghost-btn {
+  background: transparent;
+  border: 2px solid rgba(26,28,29,0.12);
+  color: #545f6c;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 12px;
+  padding: 14px 0;
+  width: 100%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.ghost-btn:hover { background: #f3f3f4; }
+.primary-btn {
+  background: #006b5f;
+  color: #ffffff;
+  border: none;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 12px;
+  padding: 15px 0;
+  width: 100%;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,107,95,0.22);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.primary-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(0,107,95,0.28); }
+.primary-btn:active:not(:disabled) { transform: scale(0.97); }
+.primary-btn:disabled { background: #e8e8e9; color: #bbcac6; cursor: default; box-shadow: none; }
+.switch-link {
+  background: transparent;
+  border: none;
+  color: #006b5f;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  width: 100%;
+  padding: 10px 0;
+  transition: background 0.2s;
+  border-radius: 10px;
+}
+.switch-link:hover { background: rgba(0,107,95,0.05); }
+.switch-link:disabled { color: #bbcac6; cursor: default; }
+@media (max-width: 768px) {
+  .pricing-grid { grid-template-columns: 1fr !important; }
+  .pro-card-inner { flex-direction: column !important; }
+  .pro-left { border-right: none !important; border-bottom: 1px solid rgba(187,202,198,0.2) !important; }
+  .nav-links { display: none !important; }
+  .hero-h1 { font-size: 44px !important; }
+  .hero-sub { font-size: 16px !important; }
+}
