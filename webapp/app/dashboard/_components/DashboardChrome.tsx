@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import styles from '../shell.module.css';
 
 interface Props {
@@ -12,17 +12,13 @@ interface Props {
 
 export default function DashboardChrome({ username, avatarInitial, avatarUrl, children }: Props) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const view = searchParams.get('view') ?? 'library';
 
   const isActive = (href: string) => {
-    if (href === '/dashboard' || href === '/dashboard?view=library' || href === '/dashboard?view=timeline') {
+    if (href === '/dashboard') {
       return pathname === '/dashboard';
     }
     return pathname.startsWith(href);
   };
-
-  const isTimeline = pathname === '/dashboard' && view === 'timeline';
 
   return (
     <div className={styles.page}>
@@ -33,22 +29,22 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
           <a href="/" className={styles.logo}>Clipmark</a>
           <nav className={styles.topNav}>
             <a
-              href="/dashboard?view=library"
-              className={`${styles.topNavLink} ${pathname === '/dashboard' && !isTimeline ? styles.topNavLinkActive : ''}`}
+              href="/dashboard"
+              className={`${styles.topNavLink} ${isActive('/dashboard') ? styles.topNavLinkActive : ''}`}
             >
-              Library
+              All Bookmarks
             </a>
             <a
-              href="/dashboard?view=timeline"
-              className={`${styles.topNavLink} ${isTimeline ? styles.topNavLinkActive : ''}`}
+              href="/dashboard/queue"
+              className={`${styles.topNavLink} ${isActive('/dashboard/queue') ? styles.topNavLinkActive : ''}`}
             >
-              Timeline
+              Revisit Queue
             </a>
             <a
               href="/dashboard/shared"
-              className={`${styles.topNavLink} ${pathname === '/dashboard/shared' ? styles.topNavLinkActive : ''}`}
+              className={`${styles.topNavLink} ${isActive('/dashboard/shared') ? styles.topNavLinkActive : ''}`}
             >
-              Shared
+              Shared ↗
             </a>
           </nav>
         </div>
@@ -57,12 +53,7 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
             <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#6c7a77' }}>search</span>
             <input type="text" placeholder="Search your bookmarks..." className={styles.searchInput} />
           </div>
-          <button className={styles.iconBtn} aria-label="Settings">
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>settings</span>
-          </button>
-          <button className={styles.iconBtn} aria-label="Help">
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>help</span>
-          </button>
+          <a href="/upgrade" className={styles.upgradeCta}>✦ Upgrade</a>
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={avatarUrl} alt={username} className={styles.avatar} />
@@ -85,12 +76,20 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
         </div>
 
         <nav className={styles.sideNav}>
+          <p className={styles.sideNavSection}>Library</p>
           <a
-            href="/dashboard?view=library"
-            className={`${styles.sideNavItem} ${pathname === '/dashboard' ? styles.sideNavItemActive : ''}`}
+            href="/dashboard"
+            className={`${styles.sideNavItem} ${isActive('/dashboard') ? styles.sideNavItemActive : ''}`}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>bookmarks</span>
             <span>All Bookmarks</span>
+          </a>
+          <a
+            href="/dashboard/videos"
+            className={`${styles.sideNavItem} ${isActive('/dashboard/videos') ? styles.sideNavItemActive : ''}`}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>video_library</span>
+            <span>Videos</span>
           </a>
           <a
             href="/dashboard/queue"
@@ -99,6 +98,7 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>schedule</span>
             <span>Revisit Queue</span>
           </a>
+          <p className={styles.sideNavSection}>Curations</p>
           <a
             href="/dashboard/groups"
             className={`${styles.sideNavItem} ${isActive('/dashboard/groups') ? styles.sideNavItemActive : ''}`}
@@ -113,6 +113,7 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>ios_share</span>
             <span>Shared</span>
           </a>
+          <p className={styles.sideNavSection}>Account</p>
           <a href="/upgrade" className={`${styles.sideNavItem} ${styles.sideNavUpgrade}`}>
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>auto_awesome</span>
             <span>Upgrade</span>
@@ -135,18 +136,18 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
       {/* ── Mobile bottom nav ── */}
       <nav className={styles.mobileNav}>
         <a
-          href="/dashboard?view=library"
-          className={`${styles.mobileNavItem} ${pathname === '/dashboard' && !isTimeline ? styles.mobileNavItemActive : ''}`}
+          href="/dashboard"
+          className={`${styles.mobileNavItem} ${isActive('/dashboard') ? styles.mobileNavItemActive : ''}`}
         >
-          <span className="material-symbols-outlined" style={{ fontSize: 22, fontVariationSettings: (pathname === '/dashboard' && !isTimeline) ? "'FILL' 1" : "'FILL' 0" }}>bookmarks</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, fontVariationSettings: isActive('/dashboard') ? "'FILL' 1" : "'FILL' 0" }}>bookmarks</span>
           <span className={styles.mobileNavLabel}>Bookmarks</span>
         </a>
         <a
-          href="/dashboard?view=timeline"
-          className={`${styles.mobileNavItem} ${isTimeline ? styles.mobileNavItemActive : ''}`}
+          href="/dashboard/queue"
+          className={`${styles.mobileNavItem} ${isActive('/dashboard/queue') ? styles.mobileNavItemActive : ''}`}
         >
-          <span className="material-symbols-outlined" style={{ fontSize: 22 }}>history</span>
-          <span className={styles.mobileNavLabel}>Timeline</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, fontVariationSettings: isActive('/dashboard/queue') ? "'FILL' 1" : "'FILL' 0" }}>schedule</span>
+          <span className={styles.mobileNavLabel}>Queue</span>
         </a>
         <a
           href="/dashboard/groups"

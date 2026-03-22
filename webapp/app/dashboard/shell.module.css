@@ -124,6 +124,31 @@
 
 .iconBtn:hover { background: rgba(26, 28, 29, 0.06); }
 
+.upgradeCta {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #732EE4 0%, #9B59E8 100%);
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 9999px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+@media (min-width: 640px) {
+  .upgradeCta { display: flex; }
+}
+
+.upgradeCta:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
 .avatar {
   width: 32px;
   height: 32px;
@@ -240,11 +265,20 @@
 }
 
 .sideNavUpgrade {
-  margin-top: 16px;
   color: #732EE4;
 }
 
 .sideNavUpgrade:hover { color: #732EE4; }
+
+.sideNavSection {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #9ca3af;
+  padding: 16px 16px 4px;
+  margin: 0;
+}
 
 .sidebarCta {
   padding: 16px;

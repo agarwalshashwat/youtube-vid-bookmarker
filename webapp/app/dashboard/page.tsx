@@ -136,8 +136,8 @@ export default async function DashboardPage({
     <div className={styles.libraryWrap}>
       <section className={styles.libraryHeader}>
         <div>
-          <h1 className={styles.pageTitle}>Editorial Collection</h1>
-          <p className={styles.pageSub}>Your curated visual knowledge base.</p>
+          <h1 className={styles.pageTitle}>Knowledge Stream</h1>
+          <p className={styles.pageSub}>Your curated editorial journey through the web.</p>
         </div>
         <div className={styles.statsRow}>
           <div className={styles.statItem}>

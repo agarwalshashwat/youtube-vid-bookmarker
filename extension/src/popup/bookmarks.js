@@ -168,16 +168,21 @@ async function renderSavedFilterPills() {
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
-let allBookmarks = [];
-let filterQuery  = '';
-let sortOrder    = 'newest';
-let viewMode     = localStorage.getItem('bm_viewMode') || 'cards';
-let density      = localStorage.getItem('bm_density')  || 'default';
-let selectedIds  = new Set();
+let allBookmarks  = [];
+let filterQuery   = '';
+let filterVideoId = null;
+let sortOrder     = 'newest';
+let viewMode      = localStorage.getItem('bm_viewMode') || 'cards';
+let density       = localStorage.getItem('bm_density')  || 'default';
+let selectedIds   = new Set();
 
 // ─── Sort & filter ────────────────────────────────────────────────────────────
 function applyFiltersAndSort(bookmarks) {
   let result = [...bookmarks];
+
+  if (filterVideoId) {
+    result = result.filter(b => b.videoId === filterVideoId);
+  }
 
   if (filterQuery) {
     const q = filterQuery.toLowerCase();
@@ -255,7 +260,7 @@ async function renderBookmarks() {
   renderStatsBar();
   updateSaveFilterBtn();
 
-  // Groups and analytics manage their own empty states and container classes
+  // Groups, analytics, revisit, and videos manage their own container
   if (viewMode === 'groups') {
     await renderGroupsView();
     return;
@@ -266,6 +271,18 @@ async function renderBookmarks() {
     container.innerHTML = '';
     selectedIds.clear();
     await renderAnalyticsView(container);
+    return;
+  }
+
+  if (viewMode === 'revisit') {
+    selectedIds.clear();
+    await renderRevisitView(container);
+    return;
+  }
+
+  if (viewMode === 'videos') {
+    selectedIds.clear();
+    await renderVideosView(container);
     return;
   }
 
@@ -1241,6 +1258,134 @@ async function loadAllBookmarks() {
   }
 }
 
+// ─── Active nav helper ────────────────────────────────────────────────────────
+function setActiveNav(id) {
+  document.querySelectorAll('.subnav-link').forEach(l => l.classList.remove('subnav-link--active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('subnav-link--active');
+}
+
+// ─── Revisit Queue View ───────────────────────────────────────────────────────
+async function renderRevisitView(container) {
+  container.innerHTML = '';
+  container.className = '';
+
+  if (allBookmarks.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📅</div>
+        <h3>Your queue is empty</h3>
+        <p>Save bookmarks from YouTube videos to build your revisit queue.</p>
+      </div>`;
+    return;
+  }
+
+  const videoTitles = await getVideoTitles();
+  const sorted = [...allBookmarks].sort((a, b) => a.id - b.id);
+
+  const header = document.createElement('div');
+  header.className = 'rq-header';
+  header.innerHTML = `
+    <h2 class="rq-title">Revisit Queue</h2>
+    <p class="rq-sub">Your oldest saved moments — oldest bookmarks listed first.</p>`;
+  container.appendChild(header);
+
+  const list = document.createElement('div');
+  list.className = 'rq-list';
+
+  sorted.forEach(b => {
+    const title = b.videoTitle || videoTitles[b.videoId] || `Video: ${b.videoId}`;
+    const ytUrl = `https://www.youtube.com/watch?v=${b.videoId}&t=${Math.floor(b.timestamp)}`;
+    const thumb = `https://img.youtube.com/vi/${b.videoId}/mqdefault.jpg`;
+    const c     = b.color || '#4da1ee';
+
+    const item = document.createElement('div');
+    item.className = 'rq-item';
+    item.innerHTML = `
+      <a href="${ytUrl}" target="_blank" rel="noopener" class="rq-thumb-wrap">
+        <img src="${thumb}" alt="${title}" class="rq-thumb" loading="lazy">
+        <span class="rq-ts">${formatTimestamp(b.timestamp)}</span>
+      </a>
+      <div class="rq-item-body">
+        <div class="rq-item-title">${title}</div>
+        <div class="rq-item-note" style="border-left-color:${c}">${b.description || 'No note added.'}</div>
+        ${b.tags && b.tags.length
+          ? `<div class="rq-tags">${b.tags.map(t =>
+              `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+            ).join('')}</div>`
+          : ''}
+        <div class="rq-item-meta">${relativeTime(b.id)} · <a href="${ytUrl}" target="_blank" rel="noopener" class="rq-jump">Jump to moment ↗</a></div>
+      </div>`;
+
+    list.appendChild(item);
+  });
+
+  container.appendChild(list);
+}
+
+// ─── Videos View ─────────────────────────────────────────────────────────────
+async function renderVideosView(container) {
+  container.innerHTML = '';
+  container.className = 'videos-view';
+
+  if (allBookmarks.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📹</div>
+        <h3>No videos yet</h3>
+        <p>Save bookmarks from YouTube videos to see them here.</p>
+      </div>`;
+    return;
+  }
+
+  const [videoTitles] = await Promise.all([getVideoTitles()]);
+  const grouped  = groupByVideo(allBookmarks);
+  const videoIds = Object.keys(grouped).sort((a, b) =>
+    Math.max(...grouped[b].map(x => x.id)) - Math.max(...grouped[a].map(x => x.id))
+  );
+
+  const header = document.createElement('div');
+  header.className = 'vv-header';
+  header.innerHTML = `<span class="vv-header-title">Videos</span><span class="vv-header-count">${videoIds.length}</span>`;
+  container.appendChild(header);
+
+  const grid = document.createElement('div');
+  grid.className = 'vv-grid';
+
+  videoIds.forEach(videoId => {
+    const bookmarks = grouped[videoId];
+    const title     = bookmarks[0].videoTitle || videoTitles[videoId] || `Video: ${videoId}`;
+    const thumb     = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+    const count     = bookmarks.length;
+    const lastSaved = Math.max(...bookmarks.map(b => b.id));
+
+    const card = document.createElement('div');
+    card.className = 'vv-card';
+    card.innerHTML = `
+      <div class="vv-thumb-wrap">
+        <img src="${thumb}" alt="${title}" class="vv-thumb" loading="lazy">
+        <span class="vv-count-badge">${count} bookmark${count !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="vv-meta">
+        <div class="vv-title">${title}</div>
+        <div class="vv-sub">${relativeTime(lastSaved)}</div>
+      </div>`;
+
+    card.addEventListener('click', () => {
+      filterVideoId = videoId;
+      viewMode = 'cards';
+      localStorage.setItem('bm_viewMode', viewMode);
+      setActiveNav('subnav-all-side');
+      updateViewToggle();
+      renderBookmarks();
+    });
+
+    grid.appendChild(card);
+  });
+
+  container.appendChild(grid);
+}
+
 // ─── View toggle ──────────────────────────────────────────────────────────────
 function updateViewToggle() {
   document.getElementById('view-cards').classList.toggle('view-btn--active',     viewMode === 'cards');
@@ -1248,9 +1393,9 @@ function updateViewToggle() {
   document.getElementById('view-groups').classList.toggle('view-btn--active',    viewMode === 'groups');
   document.getElementById('view-analytics').classList.toggle('view-btn--active', viewMode === 'analytics');
 
-  const isGroups = viewMode === 'groups';
-  document.getElementById('search-input').style.display = isGroups ? 'none' : '';
-  document.getElementById('sort-select').style.display  = isGroups ? 'none' : '';
+  const hideToolbar = viewMode === 'groups' || viewMode === 'videos';
+  document.getElementById('search-input').style.display = hideToolbar ? 'none' : '';
+  document.getElementById('sort-select').style.display  = hideToolbar ? 'none' : '';
 }
 
 function updateDensityBtn() {
@@ -1432,21 +1577,96 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Subnav — All Bookmarks
+  // Subnav — All Bookmarks (header)
   document.getElementById('subnav-all').addEventListener('click', () => {
-    document.querySelectorAll('.subnav-link').forEach(l => l.classList.remove('subnav-link--active'));
-    document.getElementById('subnav-all').classList.add('subnav-link--active');
-    if (viewMode === 'revisit') {
+    filterVideoId = null;
+    if (viewMode === 'revisit' || viewMode === 'videos') {
       viewMode = localStorage.getItem('bm_viewMode') || 'cards';
+      if (viewMode === 'revisit' || viewMode === 'videos') viewMode = 'cards';
     }
+    setActiveNav('subnav-all');
     updateViewToggle();
     renderBookmarks();
   });
 
-  // Subnav — Revisit Queue (shows all bookmarks, highlights the subnav tab for now)
+  // Subnav — All Bookmarks (sidebar)
+  document.getElementById('subnav-all-side').addEventListener('click', () => {
+    filterVideoId = null;
+    if (viewMode === 'revisit' || viewMode === 'videos') {
+      viewMode = localStorage.getItem('bm_viewMode') || 'cards';
+      if (viewMode === 'revisit' || viewMode === 'videos') viewMode = 'cards';
+    }
+    setActiveNav('subnav-all-side');
+    updateViewToggle();
+    renderBookmarks();
+  });
+
+  // Subnav — Revisit Queue (header)
   document.getElementById('subnav-revisit').addEventListener('click', () => {
-    document.querySelectorAll('.subnav-link').forEach(l => l.classList.remove('subnav-link--active'));
-    document.getElementById('subnav-revisit').classList.add('subnav-link--active');
+    filterVideoId = null;
+    viewMode = 'revisit';
+    setActiveNav('subnav-revisit');
+    updateViewToggle();
+    renderBookmarks();
+  });
+
+  // Subnav — Revisit Queue (sidebar)
+  document.getElementById('subnav-revisit-side').addEventListener('click', () => {
+    filterVideoId = null;
+    viewMode = 'revisit';
+    setActiveNav('subnav-revisit-side');
+    updateViewToggle();
+    renderBookmarks();
+  });
+
+  // Subnav — Videos (sidebar)
+  document.getElementById('subnav-videos-side').addEventListener('click', () => {
+    filterVideoId = null;
+    viewMode = 'videos';
+    setActiveNav('subnav-videos-side');
+    updateViewToggle();
+    renderBookmarks();
+  });
+
+  // Subnav — Groups (sidebar)
+  document.getElementById('subnav-groups-side').addEventListener('click', () => {
+    filterVideoId = null;
+    viewMode = 'groups';
+    localStorage.setItem('bm_viewMode', viewMode);
+    setActiveNav('subnav-groups-side');
+    updateViewToggle();
+    renderBookmarks();
+  });
+
+  // Subnav — Shared (sidebar) → opens external Clipmark page
+  document.getElementById('subnav-shared-side').addEventListener('click', () => {
+    window.open('https://clipmark-chi.vercel.app', '_blank', 'noopener');
+  });
+
+  // Mobile bottom nav
+  document.getElementById('mobile-nav-bookmarks').addEventListener('click', e => {
+    e.preventDefault();
+    filterVideoId = null;
+    if (viewMode === 'revisit' || viewMode === 'videos') viewMode = 'cards';
+    setActiveNav('subnav-all-side');
+    updateViewToggle();
+    renderBookmarks();
+  });
+  document.getElementById('mobile-nav-queue').addEventListener('click', e => {
+    e.preventDefault();
+    filterVideoId = null;
+    viewMode = 'revisit';
+    setActiveNav('subnav-revisit-side');
+    updateViewToggle();
+    renderBookmarks();
+  });
+  document.getElementById('mobile-nav-groups').addEventListener('click', e => {
+    e.preventDefault();
+    filterVideoId = null;
+    viewMode = 'groups';
+    localStorage.setItem('bm_viewMode', viewMode);
+    setActiveNav('subnav-groups-side');
+    updateViewToggle();
     renderBookmarks();
   });
 
