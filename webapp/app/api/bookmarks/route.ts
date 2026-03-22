@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, createServerSupabase } from '@/lib/supabase';
 import type { Bookmark } from '@/lib/supabase';
@@ -11,9 +12,16 @@ async function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
+    // Validate the token
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) return null;
-    return { user, client: supabase };
+    // Create an authenticated client that sends the user's JWT so RLS auth.uid() works
+    const userClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
+    return { user, client: userClient };
   }
 
   const serverClient = await createServerSupabase();

@@ -270,6 +270,20 @@
 
 .sideNavUpgrade:hover { color: #732EE4; }
 
+.signOutBtn {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: #6c7a77;
+}
+
+.signOutBtn:hover {
+  color: #ba1a1a;
+  background: rgba(186, 26, 26, 0.06);
+}
+
 .sideNavSection {
   font-size: 10px;
   font-weight: 700;

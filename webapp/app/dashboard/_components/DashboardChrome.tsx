@@ -7,10 +7,11 @@ interface Props {
   username: string;
   avatarInitial: string;
   avatarUrl: string | null;
+  isPro: boolean;
   children: React.ReactNode;
 }
 
-export default function DashboardChrome({ username, avatarInitial, avatarUrl, children }: Props) {
+export default function DashboardChrome({ username, avatarInitial, avatarUrl, isPro, children }: Props) {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
@@ -53,13 +54,18 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
             <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#6c7a77' }}>search</span>
             <input type="text" placeholder="Search your bookmarks..." className={styles.searchInput} />
           </div>
-          <a href="/upgrade" className={styles.upgradeCta}>✦ Upgrade</a>
+          {!isPro && <a href="/upgrade" className={styles.upgradeCta}>✦ Upgrade</a>}
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt={username} className={styles.avatar} />
+            <img src={avatarUrl} alt={username} className={styles.avatar} title={username} />
           ) : (
-            <div className={styles.avatarFallback}>{avatarInitial}</div>
+            <div className={styles.avatarFallback} title={username}>{avatarInitial}</div>
           )}
+          <form action="/auth/signout" method="POST">
+            <button type="submit" className={styles.iconBtn} title="Sign out">
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>logout</span>
+            </button>
+          </form>
         </div>
       </header>
 
@@ -114,10 +120,18 @@ export default function DashboardChrome({ username, avatarInitial, avatarUrl, ch
             <span>Shared</span>
           </a>
           <p className={styles.sideNavSection}>Account</p>
-          <a href="/upgrade" className={`${styles.sideNavItem} ${styles.sideNavUpgrade}`}>
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>auto_awesome</span>
-            <span>Upgrade</span>
-          </a>
+          {!isPro && (
+            <a href="/upgrade" className={`${styles.sideNavItem} ${styles.sideNavUpgrade}`}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>auto_awesome</span>
+              <span>Upgrade</span>
+            </a>
+          )}
+          <form action="/auth/signout" method="POST" style={{ width: '100%' }}>
+            <button type="submit" className={`${styles.sideNavItem} ${styles.signOutBtn}`}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>logout</span>
+              <span>Sign Out</span>
+            </button>
+          </form>
         </nav>
 
         <div className={styles.sidebarCta}>

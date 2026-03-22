@@ -23,6 +23,12 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.session) {
+      // Ensure profile row exists (trigger only fires on first-ever INSERT into auth.users)
+      const emailPrefix = (data.session.user.email ?? '').split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+      await supabase
+        .from('profiles')
+        .upsert({ id: data.session.user.id, username: emailPrefix }, { onConflict: 'id', ignoreDuplicates: true });
+
       if (extensionId) {
         // Fetch pro status to pass to extension
         const { data: profile } = await supabase

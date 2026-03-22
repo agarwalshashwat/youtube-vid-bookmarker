@@ -51,13 +51,22 @@ export default async function DashboardPage({
   // auth is already guarded by layout, but keep type safety
   if (!user) return null;
 
-  const { data: collectionsData } = await supabase
-    .from('collections')
+  const { data: userBookmarksData } = await supabase
+    .from('user_bookmarks')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .order('updated_at', { ascending: false });
 
-  const collections = (collectionsData ?? []) as Collection[];
+  // Adapt user_bookmarks rows to the Collection shape used throughout this page
+  const collections: Collection[] = (userBookmarksData ?? []).map(row => ({
+    id: row.video_id as string,
+    video_id: row.video_id as string,
+    video_title: ((row.bookmarks as Bookmark[])?.[0]?.videoTitle) ?? null,
+    bookmarks: (row.bookmarks as Bookmark[]) ?? [],
+    created_at: row.updated_at as string,
+    view_count: 0,
+    user_id: row.user_id as string,
+  }));
   const totalBookmarks = collections.reduce((sum, c) => sum + (c.bookmarks?.length ?? 0), 0);
   const uniqueTags = Array.from(new Set(collections.flatMap(c => (c.bookmarks ?? []).flatMap((b: Bookmark) => b.tags ?? []))));
   const lastSaved = collections[0]?.created_at ?? null;
@@ -94,7 +103,7 @@ export default async function DashboardPage({
                   <div className={styles.entryDate}>
                     <span className={styles.dayLabel}>{formatDayLabel(b.createdAt)}</span>
                   </div>
-                  <a href={`/v/${b.collection.id}`} className={styles.entryCard}>
+                  <a href={{`https://www.youtube.com/watch?v=${b.collection.video_id}`}} className={styles.entryCard}>
                     <div className={styles.entryInner}>
                       <div className={styles.entryThumb}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -176,7 +185,7 @@ export default async function DashboardPage({
           {collections.map(c => (
             <div key={c.id} className={styles.videoCard}>
               <div className={styles.videoLeft}>
-                <a href={`/v/${c.id}`} className={styles.videoThumbWrap}>
+                <a href={{`https://www.youtube.com/watch?v=${c.video_id}`}} className={styles.videoThumbWrap}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`https://img.youtube.com/vi/${c.video_id}/hqdefault.jpg`}
@@ -207,7 +216,7 @@ export default async function DashboardPage({
                   </div>
                 </div>
                 <div className={styles.videoActions}>
-                  <a href={`/v/${c.id}`} className={styles.videoActionBtn}>
+                  <a href={{`https://www.youtube.com/watch?v=${c.video_id}`}} className={styles.videoActionBtn}>
                     <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>play_circle</span>
                     Revisit
                   </a>
@@ -246,7 +255,7 @@ export default async function DashboardPage({
                     </div>
                   ))}
                   {(c.bookmarks?.length ?? 0) > 4 && (
-                    <a href={`/v/${c.id}`} className={styles.expandLink}>
+                    <a href={{`https://www.youtube.com/watch?v=${c.video_id}`}} className={styles.expandLink}>
                       Expand All Curations
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>expand_more</span>
                     </a>
