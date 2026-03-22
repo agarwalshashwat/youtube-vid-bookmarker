@@ -385,12 +385,12 @@ async function renderBookmarks() {
           <div class="vc-vt">
             <div class="vc-vt-thread"></div>
             ${bookmarks.map((b, i) => {
+              if (hasMore && i >= COLLAPSE_AFTER) return '';
               const c         = b.color || '#14B8A6';
               const hasNotes  = b.notes && b.notes.trim();
               const typeLabel = hasNotes ? 'ANNOTATED BOOKMARK' : 'QUICK CLIP';
-              const hiddenCls = hasMore && i >= COLLAPSE_AFTER ? ' vc-vt-item--hidden' : '';
               return `
-                <div class="vc-chapter vc-vt-item${hiddenCls}" data-bookmark-id="${b.id}" data-video-id="${videoId}" style="--bm-color:${c}">
+                <div class="vc-chapter vc-vt-item" data-bookmark-id="${b.id}" data-video-id="${videoId}" style="--bm-color:${c}">
                   <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
                   <div class="vc-vt-circle" style="border-color:${c}"></div>
                   <div class="vc-vt-content">
@@ -417,10 +417,47 @@ async function renderBookmarks() {
                   </div>
                 </div>`;
             }).join('')}
+            ${hasMore ? `
+            <div class="vc-vt-overflow vc-vt-overflow--collapsed">
+              <div class="vc-vt-overflow__inner">
+                ${bookmarks.slice(COLLAPSE_AFTER).map(b => {
+                  const c         = b.color || '#14B8A6';
+                  const hasNotes  = b.notes && b.notes.trim();
+                  const typeLabel = hasNotes ? 'ANNOTATED BOOKMARK' : 'QUICK CLIP';
+                  return `
+                <div class="vc-chapter vc-vt-item" data-bookmark-id="${b.id}" data-video-id="${videoId}" style="--bm-color:${c}">
+                  <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                  <div class="vc-vt-circle" style="border-color:${c}"></div>
+                  <div class="vc-vt-content">
+                    <div class="vc-vt-header">
+                      <span class="vc-vt-time" style="background:${c}20;color:${c}">${formatTimestamp(b.timestamp)}</span>
+                      <span class="vc-vt-type">${typeLabel}</span>
+                    </div>
+                    <div class="vc-vt-note">${b.description || 'No note added.'}</div>
+                    ${b.tags && b.tags.length
+                      ? `<div class="vc-tags">${b.tags.map(t =>
+                          `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+                        ).join('')}</div>`
+                      : ''}
+                    <div class="vc-actions">
+                      <button class="vc-notes-btn btn-icon${hasNotes ? ' vc-notes-btn--has-notes' : ''}" data-bookmark-id="${b.id}" data-video-id="${videoId}" title="Extended notes${hasNotes ? ' (has notes)' : ''}">📝</button>
+                      <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
+                      <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
+                      <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
+                    </div>
+                    <div class="vc-notes-panel" id="notes-${b.id}" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                      <textarea class="vc-notes-textarea" placeholder="Add a longer note, context, or key insight…" rows="2">${b.notes || ''}</textarea>
+                      <div class="vc-notes-hint">Ctrl+Enter to save · Esc to close</div>
+                    </div>
+                  </div>
+                </div>`;
+                }).join('')}
+              </div>
+            </div>` : ''}
           </div>
           ${hasMore ? `
           <div class="vc-expand-row">
-            <button class="vc-expand-btn" data-video-id="${videoId}" data-collapsed="true" data-collapse-after="${COLLAPSE_AFTER}">
+            <button class="vc-expand-btn" data-video-id="${videoId}" data-collapsed="true">
               Expand All Curations
               <span class="material-symbols-outlined vc-expand-arrow">expand_more</span>
             </button>
@@ -742,18 +779,15 @@ function attachEventListeners() {
 
   document.querySelectorAll('.vc-expand-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const card         = btn.closest('.vc-card');
-      const items        = card.querySelectorAll('.vc-vt-item');
-      const collapsed    = btn.dataset.collapsed === 'true';
-      const collapseAfter = parseInt(btn.dataset.collapseAfter) || 3;
+      const card      = btn.closest('.vc-card');
+      const overflow  = card.querySelector('.vc-vt-overflow');
+      const collapsed = btn.dataset.collapsed === 'true';
       if (collapsed) {
-        items.forEach(el => el.classList.remove('vc-vt-item--hidden'));
+        overflow.classList.remove('vc-vt-overflow--collapsed');
         btn.dataset.collapsed = 'false';
         btn.innerHTML = 'Collapse <span class="material-symbols-outlined vc-expand-arrow" style="transform:rotate(180deg);display:inline-block">expand_more</span>';
       } else {
-        items.forEach((el, i) => {
-          if (i >= collapseAfter) el.classList.add('vc-vt-item--hidden');
-        });
+        overflow.classList.add('vc-vt-overflow--collapsed');
         btn.dataset.collapsed = 'true';
         btn.innerHTML = 'Expand All Curations <span class="material-symbols-outlined vc-expand-arrow">expand_more</span>';
       }

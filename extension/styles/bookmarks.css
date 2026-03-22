@@ -1449,6 +1449,32 @@
     display: none !important;
 }
 
+/* ── Overflow wrapper animation ─────────────────────────────────────── */
+.vc-vt-overflow {
+    overflow: hidden;
+    max-height: 1200px;
+    opacity: 1;
+    margin-top: 0;
+    transition: max-height 0.38s ease,
+                opacity     0.28s ease,
+                margin-top  0.35s ease;
+}
+.vc-vt-overflow--collapsed {
+    max-height: 0;
+    opacity:    0;
+    margin-top: -20px;
+}
+.vc-vt-overflow__inner {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+/* density overrides */
+.density-compact     .vc-vt-overflow__inner          { gap: 14px; }
+.density-compact     .vc-vt-overflow--collapsed      { margin-top: -14px; }
+.density-comfortable .vc-vt-overflow__inner          { gap: 24px; }
+.density-comfortable .vc-vt-overflow--collapsed      { margin-top: -24px; }
+
 /* Dot circle — absolutely positioned to sit on the thread */
 .vc-vt-circle {
     position: absolute;
