@@ -78,7 +78,6 @@ export default async function DashboardPage({
   const grouped = groupBookmarksByMonth(allBookmarks);
 
   return isTimeline ? (
-    /* ── Timeline View ── */
     <div className={styles.timelineWrap}>
       <div className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>Knowledge Stream</h1>
@@ -103,7 +102,7 @@ export default async function DashboardPage({
                   <div className={styles.entryDate}>
                     <span className={styles.dayLabel}>{formatDayLabel(b.createdAt)}</span>
                   </div>
-                  <a href={{`https://www.youtube.com/watch?v=${b.collection.video_id}`}} className={styles.entryCard}>
+                  <a href={`https://www.youtube.com/watch?v=${b.collection.video_id}`} className={styles.entryCard}>
                     <div className={styles.entryInner}>
                       <div className={styles.entryThumb}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -141,7 +140,6 @@ export default async function DashboardPage({
       )}
     </div>
   ) : (
-    /* ── Library View ── */
     <div className={styles.libraryWrap}>
       <section className={styles.libraryHeader}>
         <div>
@@ -185,7 +183,7 @@ export default async function DashboardPage({
           {collections.map(c => (
             <div key={c.id} className={styles.videoCard}>
               <div className={styles.videoLeft}>
-                <a href={{`https://www.youtube.com/watch?v=${c.video_id}`}} className={styles.videoThumbWrap}>
+                <a href={`https://www.youtube.com/watch?v=${c.video_id}`} className={styles.videoThumbWrap}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`https://img.youtube.com/vi/${c.video_id}/hqdefault.jpg`}
@@ -216,7 +214,7 @@ export default async function DashboardPage({
                   </div>
                 </div>
                 <div className={styles.videoActions}>
-                  <a href={{`https://www.youtube.com/watch?v=${c.video_id}`}} className={styles.videoActionBtn}>
+                  <a href={`https://www.youtube.com/watch?v=${c.video_id}`} className={styles.videoActionBtn}>
                     <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>play_circle</span>
                     Revisit
                   </a>
@@ -255,7 +253,7 @@ export default async function DashboardPage({
                     </div>
                   ))}
                   {(c.bookmarks?.length ?? 0) > 4 && (
-                    <a href={{`https://www.youtube.com/watch?v=${c.video_id}`}} className={styles.expandLink}>
+                    <a href={`https://www.youtube.com/watch?v=${c.video_id}`} className={styles.expandLink}>
                       Expand All Curations
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>expand_more</span>
                     </a>
