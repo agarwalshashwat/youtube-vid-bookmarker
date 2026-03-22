@@ -51,7 +51,8 @@ You watched a 3-hour podcast. You want a LinkedIn post and a shareable guide. Bo
 - **Custom revisit reminders** — set a per-video reminder interval (e.g. every 3 days); stored in `chrome.storage.sync` as `rem_{videoId}`; popup shows the next due date with change/clear controls
 
 ### Dashboard
-- **Video-grouped cards** — bookmarks grouped by video with a cinematic thumbnail, visual timeline scrubber with colored dots, and chapter-style rows
+- **Editorial card layout** — each video gets a two-column card: left panel with rounded thumbnail (gradient overlay, YouTube badge, duration, hover play button), visual timeline scrubber with colored dots, and Revisit/Group action buttons; right panel with large title, bookmark count/date metadata, and a vertical timeline thread of all bookmarks
+- **Vertical bookmark timeline** — single connecting thread line with colored dot markers, timestamp badges, type labels ("ANNOTATED BOOKMARK" / "QUICK CLIP"), and hover-reveal action buttons; collapse/expand cards with more than 3 bookmarks
 - **Timeline view** — chronological view of all bookmarks across all videos with month/year markers
 - **Groups view** — playlist-style grouping of videos; create/rename/delete groups, add any video to multiple groups
 - **Search & sort** — filter by description, title, or tag; sort newest/oldest/timestamp

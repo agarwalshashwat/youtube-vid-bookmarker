@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         });
         return NextResponse.redirect(`${origin}/auth/extension-success?${p.toString()}`);
       }
-      return NextResponse.redirect(`${origin}/`);
+      return NextResponse.redirect(`${origin}/dashboard`);
     }
   }
 

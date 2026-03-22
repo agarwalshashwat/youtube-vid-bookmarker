@@ -159,6 +159,7 @@
 - [ ] Empty state illustrations — friendly graphics when no bookmarks exist
 - [x] Keyboard shortcut hints — tooltip on Save Moment button showing Alt+S shortcut
 - [ ] Success animations — confetti or checkmark animation on first share
+- [x] **Dashboard "Editorial Collection" redesign** — full bookmarks page overhaul matching the design system reference: 50/50 two-column card layout (thumbnail panel + content panel), rounded 24px cards with elevated shadow, gradient overlay on thumbnails with YouTube badge + duration + hover play button, replaced per-item spine structure with a single absolute thread line + ring-shadow dots, actions hidden until hover, full-width expand/collapse button with border-top, 22px headline titles, responsive collapse to stacked columns on narrow screens
 
 ### Engagement Hooks
 - [ ] **Bookmark streak** — "5-day streak! 🔥" badge in popup for daily usage

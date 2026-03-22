@@ -329,54 +329,98 @@ async function renderBookmarks() {
     const card = document.createElement('div');
     card.className = 'vc-card' + (videoId === featuredVideoId ? ' vc-card--featured' : '');
 
+    const maxTs    = Math.max(...bookmarks.map(b => b.timestamp));
+    const addedTs  = Math.max(...bookmarks.map(b => b.createdAt ? new Date(b.createdAt).getTime() : b.id));
+    const addedStr = new Date(addedTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const COLLAPSE_AFTER = 3;
+    const hasMore  = bookmarks.length > COLLAPSE_AFTER;
+
     card.innerHTML = `
-      <div class="vc-head">
-        <a href="${ytUrl}" target="_blank" rel="noopener" class="vc-thumb-wrap">
-          <img src="${thumb}" alt="${title}" class="vc-thumb" loading="lazy">
-        </a>
-        <div class="vc-meta">
-          <a class="vc-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
-          <div class="vc-count-row">
-            <span class="vc-count-icon">⏱</span>
-            <span class="vc-count-text">${count} bookmark${count !== 1 ? 's' : ''}</span>
-            <button class="vc-revision-btn" data-video-id="${videoId}">▶ Revisit</button>
-            <button class="vc-group-btn" data-video-id="${videoId}" title="Add to group">⊕ Group</button>
+      <div class="vc-body">
+        <div class="vc-left">
+          <a href="${ytUrl}" target="_blank" rel="noopener" class="vc-thumb-wrap">
+            <img src="${thumb}" alt="${title}" class="vc-thumb" loading="lazy">
+            <div class="vc-thumb-gradient"></div>
+            <div class="vc-thumb-overlay-bottom">
+              <span class="vc-badge">YOUTUBE</span>
+              <span class="vc-duration">${formatTimestamp(maxTs)}</span>
+            </div>
+            <div class="vc-play-btn">
+              <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;font-size:40px">play_arrow</span>
+            </div>
+          </a>
+          <div class="vc-scrubber">
+            <div class="vc-track">${buildTimeline(bookmarks)}</div>
+            <div class="vc-scrubber-times">
+              <span class="vc-time-label">00:00</span>
+              <span class="vc-time-label">${formatTimestamp(maxTs)}</span>
+            </div>
+          </div>
+          <div class="vc-card-btns">
+            <button class="vc-revision-btn" data-video-id="${videoId}">
+              <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">play_circle</span> Revisit
+            </button>
+            <button class="vc-group-btn" data-video-id="${videoId}">
+              <span class="material-symbols-outlined">folder</span> Group
+            </button>
           </div>
         </div>
-      </div>
-      <div class="vc-timeline-row">
-        <div class="vc-track">
-          ${buildTimeline(bookmarks)}
+        <div class="vc-right">
+          <div class="vc-right-head">
+            <a class="vc-title" href="${ytUrl}" target="_blank" rel="noopener">${title}</a>
+            <button class="vc-more-btn" title="More options">
+              <span class="material-symbols-outlined">more_vert</span>
+            </button>
+          </div>
+          <div class="vc-meta-row">
+            <span class="vc-count-badge">${count} Bookmark${count !== 1 ? 's' : ''}</span>
+            <span class="vc-meta-dot"></span>
+            <span class="vc-added-date">Added ${addedStr}</span>
+          </div>
+          <div class="vc-vt">
+            <div class="vc-vt-thread"></div>
+            ${bookmarks.map((b, i) => {
+              const c         = b.color || '#14B8A6';
+              const hasNotes  = b.notes && b.notes.trim();
+              const typeLabel = hasNotes ? 'ANNOTATED BOOKMARK' : 'QUICK CLIP';
+              const hiddenCls = hasMore && i >= COLLAPSE_AFTER ? ' vc-vt-item--hidden' : '';
+              return `
+                <div class="vc-chapter vc-vt-item${hiddenCls}" data-bookmark-id="${b.id}" data-video-id="${videoId}" style="--bm-color:${c}">
+                  <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                  <div class="vc-vt-circle" style="border-color:${c}"></div>
+                  <div class="vc-vt-content">
+                    <div class="vc-vt-header">
+                      <span class="vc-vt-time" style="background:${c}20;color:${c}">${formatTimestamp(b.timestamp)}</span>
+                      <span class="vc-vt-type">${typeLabel}</span>
+                    </div>
+                    <div class="vc-vt-note">${b.description || 'No note added.'}</div>
+                    ${b.tags && b.tags.length
+                      ? `<div class="vc-tags">${b.tags.map(t =>
+                          `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
+                        ).join('')}</div>`
+                      : ''}
+                    <div class="vc-actions">
+                      <button class="vc-notes-btn btn-icon${hasNotes ? ' vc-notes-btn--has-notes' : ''}" data-bookmark-id="${b.id}" data-video-id="${videoId}" title="Extended notes${hasNotes ? ' (has notes)' : ''}">📝</button>
+                      <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
+                      <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
+                      <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
+                    </div>
+                    <div class="vc-notes-panel" id="notes-${b.id}" data-bookmark-id="${b.id}" data-video-id="${videoId}">
+                      <textarea class="vc-notes-textarea" placeholder="Add a longer note, context, or key insight…" rows="2">${b.notes || ''}</textarea>
+                      <div class="vc-notes-hint">Ctrl+Enter to save · Esc to close</div>
+                    </div>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+          ${hasMore ? `
+          <div class="vc-expand-row">
+            <button class="vc-expand-btn" data-video-id="${videoId}" data-collapsed="true">
+              Expand All Curations
+              <span class="material-symbols-outlined vc-expand-arrow">expand_more</span>
+            </button>
+          </div>` : ''}
         </div>
-      </div>
-      <div class="vc-chapters-label">Bookmarks</div>
-      <div class="vc-chapters">
-        ${bookmarks.map(b => {
-          const c        = b.color || '#14B8A6';
-          const hasNotes = b.notes && b.notes.trim();
-          return `
-            <div class="vc-chapter" data-bookmark-id="${b.id}" data-video-id="${videoId}" style="--bm-color:${c}">
-              <input type="checkbox" class="bookmark-checkbox vc-cb" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-              <span class="vc-dot-sm" style="background:${c}"></span>
-              <span class="vc-time" style="color:${c}">${formatTimestamp(b.timestamp)}</span>
-              <span class="vc-desc">${b.description || 'No note added.'}</span>
-              ${b.tags && b.tags.length
-                ? `<div class="vc-tags">${b.tags.map(t =>
-                    `<span class="tag-badge" style="background:${getTagColor([t])}">${t}</span>`
-                  ).join('')}</div>`
-                : '<div class="vc-tags"></div>'}
-              <div class="vc-actions">
-                <button class="vc-notes-btn btn-icon${hasNotes ? ' vc-notes-btn--has-notes' : ''}" data-bookmark-id="${b.id}" data-video-id="${videoId}" title="Extended notes${hasNotes ? ' (has notes)' : ''}">📝</button>
-                <button class="btn-icon copy-link" data-video-id="${videoId}" data-timestamp="${b.timestamp}" title="Copy link">⎘</button>
-                <button class="vc-jump jump-to-video" data-video-id="${videoId}" data-timestamp="${b.timestamp}">Jump</button>
-                <button class="vc-del delete-bookmark" data-bookmark-id="${b.id}" data-video-id="${videoId}">×</button>
-              </div>
-            </div>
-            <div class="vc-notes-panel" id="notes-${b.id}" data-bookmark-id="${b.id}" data-video-id="${videoId}">
-              <textarea class="vc-notes-textarea" placeholder="Add a longer note, context, or key insight…" rows="2">${b.notes || ''}</textarea>
-              <div class="vc-notes-hint">Ctrl+Enter to save · Esc to close</div>
-            </div>`;
-        }).join('')}
       </div>`;
 
     container.appendChild(card);
@@ -688,6 +732,23 @@ function attachEventListeners() {
     ta.addEventListener('keydown', e => {
       if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); ta.blur(); }
       if (e.key === 'Escape') { panel.classList.remove('vc-notes-panel--open'); }
+    });
+  });
+
+  document.querySelectorAll('.vc-expand-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card      = btn.closest('.vc-card');
+      const hidden    = card.querySelectorAll('.vc-vt-item--hidden');
+      const collapsed = btn.dataset.collapsed === 'true';
+      if (collapsed) {
+        hidden.forEach(el => el.classList.remove('vc-vt-item--hidden'));
+        btn.dataset.collapsed = 'false';
+        btn.innerHTML = 'Collapse <span class="material-symbols-outlined vc-expand-arrow" style="transform:rotate(180deg);display:inline-block">expand_more</span>';
+      } else {
+        hidden.forEach(el => el.classList.add('vc-vt-item--hidden'));
+        btn.dataset.collapsed = 'true';
+        btn.innerHTML = 'Expand All Curations <span class="material-symbols-outlined vc-expand-arrow">expand_more</span>';
+      }
     });
   });
 }
