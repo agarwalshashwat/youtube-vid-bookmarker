@@ -24,6 +24,9 @@ let cachedTranscript       = null; // null = not fetched yet, [] = fetched but e
 let transcriptFetchPromise = null;
 let cachedTranscriptVideoId = null;
 
+// ── Shared utilities (manually kept in sync with packages/core/src/) ──────────
+// content.js cannot import ES modules. If you update these functions,
+// also update the corresponding file in packages/core/src/.
 // ─── Tag colours (must match popup.js) ───────────────────────────────────────
 const TAG_COLORS = {
   important: '#ff6b6b',

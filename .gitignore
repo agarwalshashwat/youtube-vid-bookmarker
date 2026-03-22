@@ -43,6 +43,9 @@ webapp/out/
 # Production
 webapp/build
 
+# Extension build output
+extension/dist/
+
 # Environment variables
 .env
 webapp/.env

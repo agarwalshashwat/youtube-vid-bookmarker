@@ -1,3 +1,6 @@
+// ── Shared utilities (manually kept in sync with packages/core/src/) ──────────
+// background.js cannot import ES modules. If you update these functions,
+// also update the corresponding file in packages/core/src/.
 // ─── Constants ──────────────────────────────────────────────────────────────
 const TAG_COLORS = {
     important: '#ff6b6b',

@@ -1,0 +1,8 @@
+{
+  "name": "@clipmark/types",
+  "version": "1.0.0",
+  "description": "Shared TypeScript types for Clipmark",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "MIT"
+}

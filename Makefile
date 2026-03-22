@@ -1,7 +1,7 @@
 # Clipmark — dev commands
 # Usage: make <target>
 
-.PHONY: help dev build start migrate sync-tokens ext-zip ext-open clean
+.PHONY: help dev build start migrate sync-tokens ext-dev ext-build ext-zip ext-open clean
 
 WEBAPP_DIR := webapp
 EXT_DIR    := extension
@@ -19,7 +19,9 @@ help:
 	@echo "    make migrate    — run DB migrations"
 	@echo ""
 	@echo "  Extension"
-	@echo "    make ext-zip    — zip extension folder for Chrome Web Store"
+	@echo "    make ext-dev    — vite dev (HMR for extension UI)"
+	@echo "    make ext-build  — vite build → dist/ (load unpacked from there)"
+	@echo "    make ext-zip    — build + zip dist/ for Chrome Web Store"
 	@echo "    make ext-open   — open chrome://extensions in default browser"
 	@echo ""
 	@echo "  Shared"
@@ -45,13 +47,19 @@ sync-tokens:
 	npm run sync-tokens
 
 # ── Extension ─────────────────────────────────────────────────────────────────
-ext-zip:
+ext-dev:
+	cd $(EXT_DIR) && npm run dev
+
+ext-build:
+	cd $(EXT_DIR) && npm run build
+
+ext-zip: ext-build
 	@rm -f $(ZIP_NAME)
-	@cd $(EXT_DIR) && zip -r ../$(ZIP_NAME) . \
+	@cd $(EXT_DIR)/dist && zip -r ../../$(ZIP_NAME) . \
 		--exclude "*.DS_Store" \
 		--exclude "__MACOSX/*" \
 		--exclude "*.map"
-	@echo "✓ $(ZIP_NAME) created"
+	@echo "✓ $(ZIP_NAME) created from dist/"
 
 ext-open:
 	@open -a "Google Chrome" "chrome://extensions" 2>/dev/null || \
@@ -64,4 +72,5 @@ ext-open:
 clean:
 	@rm -f $(ZIP_NAME)
 	@rm -rf $(WEBAPP_DIR)/.next
+	@rm -rf $(EXT_DIR)/dist
 	@echo "✓ cleaned"

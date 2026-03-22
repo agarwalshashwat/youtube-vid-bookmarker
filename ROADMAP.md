@@ -10,7 +10,9 @@
 |----------|-------|
 | Product name | Clipmark |
 | Type | Chrome Extension (Manifest V3) + Next.js 14 webapp |
-| Stack | Vanilla JS extension · Next.js + TypeScript + Supabase |
+| Stack | React 18 + TypeScript extension UI · Next.js + TypeScript + Supabase |
+| Build | Vite + @crxjs/vite-plugin (extension) · Next.js (webapp) |
+| Packages | `@clipmark/types` · `@clipmark/core` · `@clipmark/design-system` |
 | Storage | `chrome.storage.sync` + Supabase `user_bookmarks` (when signed in) |
 | Auth | Google OAuth via Supabase; token stored in sync storage |
 | AI | Claude Haiku — transcript auto-fill, summaries, tag suggestions, social posts |
@@ -147,6 +149,37 @@
 - [x] `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_WEBHOOK_SECRET`, `DODO_MONTHLY_PRODUCT_ID`, `DODO_ANNUAL_PRODUCT_ID`, `DODO_LIFETIME_PRODUCT_ID` env vars
 - [ ] Supabase migration: `ALTER TABLE profiles ADD COLUMN is_pro BOOLEAN DEFAULT false` *(run once in prod — manual step)*
 - [ ] Lifetime → Annual migration logic for when lifetime offer ends
+
+---
+
+## Phase 8 — React Migration ✅ Done
+
+> Migrate the extension UI to React + TypeScript to enable a proper component model, type safety, and a shared packages layer.
+
+### Packages
+- [x] `packages/types` — shared TypeScript interfaces: `Bookmark`, `UserProfile`, `SortOrder`, `ViewMode`, `Density`, `AnalyticsEvent`
+- [x] `packages/core` — extracted and typed utilities shared by all React UIs:
+  - `tags.ts` — `TAG_COLORS`, `parseTags`, `getTagColor`, `stringToColor`
+  - `format.ts` — `formatTimestamp`, `relativeTime`, `extractVideoId`
+  - `storage.ts` — `bmKey`, `syncGet/Set`, `getAllBookmarks`, `getVideoBookmarks`, `saveVideoBookmarks`
+  - `messaging.ts` — `sendMessageToTab`, `waitForContentScript`, `getCurrentTab`
+  - `bookmarks.ts` — `createBookmark`, `deleteBookmark`, `updateBookmark`, `markBookmarkRevisited`
+  - `analytics.ts` — local analytics (500-event rolling window in `chrome.storage.local`)
+- [x] npm workspaces — root `package.json` wires `packages/*` and `extension` as workspace members
+
+### Extension Build
+- [x] Vite + `@crxjs/vite-plugin` — bundles React TSX for popup-like pages, keeps `background.js` and `content.js` as vanilla IIFE/service-worker
+- [x] `extension/tsconfig.json` — strict TypeScript with path aliases for `@clipmark/core` and `@clipmark/types`
+
+### UI Migration
+- [x] **Side panel** → React (`src/side-panel/`) — `App.tsx` + `Header`, `SaveMoment`, `BookmarkList`, `AISummaryPanel`, `SocialPostPanel`, `BottomNav`
+- [x] **Bookmarks dashboard** → React (`src/dashboard/`) — `useDashboard` hook + `CardsView`, `TimelineView`, `GroupsView`, `AnalyticsView`, `RevisitView`, `FilterBar`, `StatsBar`, `SideNav`
+- [x] `content.js` and `background.js` — unchanged (vanilla JS, cannot import ES modules)
+
+### Analytics
+- [x] `analytics.ts` — records `bookmark_created`, `bookmark_deleted`, `bookmark_revisited`, `export` events
+- [x] `computeStats()` — aggregates events into totals, activity-by-day, and video frequency
+- [x] `AnalyticsView` — renders stats from local analytics store
 
 ---
 

@@ -10,7 +10,7 @@
         "https://clipmark-chi.vercel.app/*"
     ],
     "web_accessible_resources": [{
-      "resources": ["src/pages/bookmarks.html", "src/popup/bookmarks.js", "styles/bookmarks.css"],
+      "resources": ["src/pages/bookmarks.html"],
       "matches": ["<all_urls>"]
     }],
     "action": {

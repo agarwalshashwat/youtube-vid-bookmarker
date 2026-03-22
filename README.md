@@ -85,31 +85,46 @@ You watched a 3-hour podcast. You want a LinkedIn post and a shareable guide. Bo
 ## Project Structure
 
 ```
-youtube-vid-bookmarker/
-├── extension/                     # Chrome Extension (Manifest V3, vanilla JS)
+clipmark/
+├── extension/                     # Chrome Extension (Manifest V3)
 │   ├── manifest.json              # MV3 config — permissions, commands, host_permissions
+│   ├── vite.config.ts             # Vite + @crxjs/vite-plugin build config
+│   ├── tsconfig.json              # TypeScript config for React UI
 │   ├── assets/icons/              # Extension icons (16/48/128px + logo)
 │   ├── src/
 │   │   ├── background/
-│   │   │   └── background.js      # Service worker: auth token storage, messaging
+│   │   │   └── background.js      # Service worker: auth token storage, messaging (vanilla JS)
 │   │   ├── content/
-│   │   │   └── content.js         # YouTube page: markers, keyboard shortcuts, revisit mode
+│   │   │   └── content.js         # YouTube page: markers, keyboard shortcuts, revisit mode (vanilla JS)
 │   │   ├── pages/
-│   │   │   ├── popup.html         # Extension popup HTML
-│   │   │   ├── bookmarks.html     # Full-page dashboard HTML
-│   │   │   └── side-panel.html    # Side panel HTML
-│   │   └── popup/
-│   │       ├── popup.js           # Popup: bookmark CRUD, AI features, auth, reminders
-│   │       ├── bookmarks.js       # Dashboard: grouped cards, timeline, groups, export/import
-│   │       ├── side-panel.js      # Side panel logic
-│   │       └── theme-loader.js    # Theme initialization
+│   │   │   ├── bookmarks.html     # Dashboard entry point (React)
+│   │   │   └── side-panel.html    # Side panel entry point (React)
+│   │   ├── side-panel/            # React app — side panel UI
+│   │   │   ├── main.tsx
+│   │   │   ├── App.tsx
+│   │   │   └── components/        # Header, SaveMoment, BookmarkList, AISummaryPanel, …
+│   │   ├── dashboard/             # React app — bookmarks dashboard
+│   │   │   ├── main.tsx
+│   │   │   ├── App.tsx
+│   │   │   ├── useDashboard.ts    # Central state hook (filter, sort, view, selection)
+│   │   │   └── components/        # CardsView, TimelineView, GroupsView, AnalyticsView, …
+│   │   └── shared/
+│   │       └── components/        # Shared React components (BookmarkItem, TagBadge, Toast)
 │   └── styles/
-│       ├── popup.css              # Popup styles
-│       ├── bookmarks.css          # Dashboard styles
 │       ├── side-panel.css         # Side panel styles
+│       ├── bookmarks.css          # Dashboard styles
 │       └── design-tokens.css      # Shared CSS design tokens
 │
 ├── packages/
+│   ├── types/                     # Shared TypeScript interfaces (Bookmark, UserProfile, …)
+│   ├── core/                      # Shared utilities for extension React UI
+│   │   └── src/
+│   │       ├── tags.ts            # TAG_COLORS, parseTags, getTagColor
+│   │       ├── format.ts          # formatTimestamp, relativeTime, extractVideoId
+│   │       ├── storage.ts         # bmKey, syncGet/Set, getAllBookmarks, getVideoBookmarks
+│   │       ├── messaging.ts       # sendMessageToTab, waitForContentScript
+│   │       ├── bookmarks.ts       # createBookmark, deleteBookmark, updateBookmark
+│   │       └── analytics.ts       # Local analytics (chrome.storage.local, 500-event window)
 │   └── design-system/             # Shared design tokens (extension + webapp)
 │
 ├── webapp/                        # Next.js 14 + Supabase
@@ -173,9 +188,17 @@ Bookmarks are stored per-video in `chrome.storage.sync`:
 ## Installation
 
 ### Load unpacked (development)
-1. Clone this repo
-2. Go to `chrome://extensions/` → enable **Developer mode**
-3. Click **Load unpacked** → select the `extension/` directory
+```bash
+npm install               # install all workspace dependencies
+make ext-build            # bundle extension with Vite → extension/dist/
+```
+1. Go to `chrome://extensions/` → enable **Developer mode**
+2. Click **Load unpacked** → select `extension/dist/`
+
+For HMR during extension UI development:
+```bash
+make ext-dev              # vite dev server (auto-reloads on save)
+```
 
 ### Run the webapp locally
 ```bash
@@ -195,7 +218,7 @@ npm install
 npm run dev
 ```
 
-Update `API_BASE` at the top of `extension/src/popup/popup.js` to `http://localhost:3000` for local development.
+Update `API_BASE` at the top of `packages/core/src/storage.ts` to `http://localhost:3000` for local development.
 
 ---
 
@@ -212,7 +235,9 @@ Update `API_BASE` at the top of `extension/src/popup/popup.js` to `http://localh
 
 | Layer | Stack |
 |-------|-------|
-| Extension | Vanilla JS, Chrome Manifest V3 |
+| Extension UI | React 18, TypeScript, Vite + @crxjs/vite-plugin |
+| Extension logic | Vanilla JS (content.js, background.js — Chrome MV3) |
+| Shared packages | `@clipmark/types` (TypeScript interfaces), `@clipmark/core` (utilities + analytics) |
 | Webapp | Next.js 14, TypeScript |
 | Database | Supabase (PostgreSQL + JSONB) |
 | Auth | Google OAuth via Supabase |
