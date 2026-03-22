@@ -99,9 +99,14 @@ function syncSet(data) {
   });
 }
 
-async function getVideoBookmarks(videoId) {
+async function getVideoBookmarksLocal(videoId) {
   const r = await syncGet({ [bmKey(videoId)]: [] });
   return r[bmKey(videoId)];
+}
+
+async function getVideoBookmarks(videoId) {
+  await pullFromCloud(videoId);
+  return getVideoBookmarksLocal(videoId);
 }
 
 async function saveVideoBookmarks(videoId, bookmarks) {
@@ -124,6 +129,27 @@ async function syncToCloud(videoId, bookmarks) {
     });
   } catch {
     // Cloud sync is best-effort — don't block the user
+  }
+}
+
+async function pullFromCloud(videoId) {
+  try {
+    const { bmUser } = await syncGet({ bmUser: null });
+    if (!bmUser?.accessToken) return;
+    const res = await fetch(`${API_BASE}/api/bookmarks?videoId=${encodeURIComponent(videoId)}`, {
+      headers: { 'Authorization': `Bearer ${bmUser.accessToken}` },
+    });
+    if (!res.ok) return;
+    const { bookmarks: cloudBms } = await res.json();
+    if (!cloudBms?.length) return;
+    const localBms = await getVideoBookmarksLocal(videoId);
+    const localIds = new Set(localBms.map(b => b.id));
+    const newFromCloud = cloudBms.filter(b => !localIds.has(b.id));
+    if (!newFromCloud.length) return;
+    const merged = [...localBms, ...newFromCloud];
+    await saveVideoBookmarks(videoId, merged);
+  } catch {
+    // Pull is best-effort — don't block the user
   }
 }
 

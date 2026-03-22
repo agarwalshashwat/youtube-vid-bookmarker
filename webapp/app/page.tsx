@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { ThemeToggle } from './components/ThemeToggle';
+import { createServerSupabase } from '@/lib/supabase';
 
 export default async function Home({
   searchParams,
@@ -15,6 +16,11 @@ export default async function Home({
     if (extensionId) params.set('extensionId', extensionId);
     redirect(`/auth/callback?${params.toString()}`);
   }
+
+  // Redirect logged-in users to their dashboard
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) redirect('/dashboard');
 
   return (
     <main style={{ background: '#f9f9fa', color: '#1A1C1D', fontFamily: "'Inter', sans-serif", minHeight: '100vh', overflowX: 'hidden' }}>

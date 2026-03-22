@@ -74,9 +74,14 @@ function extractVideoId(url) {
   }
 }
 
-async function getVideoBookmarks(videoId) {
+async function getVideoBookmarksLocal(videoId) {
   const r = await syncGet({ [bmKey(videoId)]: [] });
   return r[bmKey(videoId)];
+}
+
+async function getVideoBookmarks(videoId) {
+  await pullFromCloud(videoId);
+  return getVideoBookmarksLocal(videoId);
 }
 
 async function saveVideoBookmarks(videoId, bookmarks) {
@@ -96,6 +101,27 @@ async function saveVideoBookmarks(videoId, bookmarks) {
     }
   } catch {
     // Best-effort cloud sync
+  }
+}
+
+async function pullFromCloud(videoId) {
+  try {
+    const { bmUser } = await syncGet({ bmUser: null });
+    if (!bmUser?.accessToken) return;
+    const res = await fetch(`${API_BASE}/api/bookmarks?videoId=${encodeURIComponent(videoId)}`, {
+      headers: { 'Authorization': `Bearer ${bmUser.accessToken}` },
+    });
+    if (!res.ok) return;
+    const { bookmarks: cloudBms } = await res.json();
+    if (!cloudBms?.length) return;
+    const localBms = await getVideoBookmarksLocal(videoId);
+    const localIds = new Set(localBms.map(b => b.id));
+    const newFromCloud = cloudBms.filter(b => !localIds.has(b.id));
+    if (!newFromCloud.length) return;
+    const merged = [...localBms, ...newFromCloud];
+    await saveVideoBookmarks(videoId, merged);
+  } catch {
+    // Pull is best-effort — don't block the user
   }
 }
 
@@ -592,11 +618,33 @@ async function loadBookmarks() {
   }
 }
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+async function loadAuthState() {
+  const { bmUser } = await new Promise(resolve => chrome.storage.sync.get({ bmUser: null }, resolve));
+  const signinBtn  = document.getElementById('signin-btn');
+  const userChip   = document.getElementById('user-chip');
+  const signoutBtn = document.getElementById('signout-btn');
+  if (!signinBtn || !userChip) return;
+
+  if (bmUser) {
+    signinBtn.style.display  = 'none';
+    userChip.style.display   = '';
+    userChip.textContent     = bmUser.userEmail?.split('@')[0] || 'Signed in';
+    userChip.title           = bmUser.userEmail || '';
+    if (signoutBtn) signoutBtn.style.display = '';
+  } else {
+    signinBtn.style.display  = '';
+    userChip.style.display   = 'none';
+    if (signoutBtn) signoutBtn.style.display = 'none';
+  }
+}
+
 // ─── Initialize ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   debugLog('Init', 'Side panel opened');
 
   loadBookmarks();
+  loadAuthState();
 
   // Theme toggle
   function initTheme() {
@@ -666,6 +714,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  document.getElementById('signin-btn').addEventListener('click', () => {
+    chrome.tabs.create({ url: `${API_BASE}/signin?extensionId=${chrome.runtime.id}` });
+  });
+
+  document.getElementById('signout-btn').addEventListener('click', async () => {
+    await new Promise(resolve => chrome.storage.sync.remove('bmUser', resolve));
+    loadAuthState();
+  });
+
   document.getElementById('dashboard-link').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('src/pages/bookmarks.html') });
   });
@@ -691,6 +748,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (area === 'sync') {
       debugLog('Storage', 'Change detected, reloading bookmarks');
       loadBookmarks();
+      if (changes.bmUser) loadAuthState();
     }
   });
 

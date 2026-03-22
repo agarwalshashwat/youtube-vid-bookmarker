@@ -1,3 +1,6 @@
+// ─── API config ───────────────────────────────────────────────────────────────
+const API_BASE = 'https://clipmark-chi.vercel.app';
+
 // ─── Tag colours (must match popup.js / content.js) ──────────────────────────
 const TAG_COLORS = {
   important: '#ff6b6b',
@@ -1435,6 +1438,31 @@ function outsidePopoverHandler(e) {
   }
 }
 
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+function loadAuthState() {
+  chrome.storage.sync.get({ bmUser: null }, ({ bmUser }) => {
+    const signinBtn  = document.getElementById('signin-btn');
+    const userChip   = document.getElementById('user-chip');
+    const signoutBtn = document.getElementById('signout-btn');
+    const upgradeBtn = document.getElementById('dashboard-upgrade-btn');
+    if (!signinBtn || !userChip) return;
+
+    if (bmUser) {
+      signinBtn.style.display  = 'none';
+      userChip.style.display   = '';
+      userChip.textContent     = bmUser.userEmail?.split('@')[0] || 'Signed in';
+      userChip.title           = bmUser.userEmail || '';
+      if (signoutBtn) signoutBtn.style.display = '';
+      if (upgradeBtn) upgradeBtn.style.display = bmUser.isPro ? 'none' : '';
+    } else {
+      signinBtn.style.display  = '';
+      userChip.style.display   = 'none';
+      if (signoutBtn) signoutBtn.style.display = 'none';
+      if (upgradeBtn) upgradeBtn.style.display = '';
+    }
+  });
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // ── Theme Toggle ────────────────────────────────────────────────────────────
@@ -1469,6 +1497,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener('click', toggleTheme);
   }
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  loadAuthState();
+
+  document.getElementById('signin-btn')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: `${API_BASE}/signin?extensionId=${chrome.runtime.id}` });
+  });
+
+  document.getElementById('signout-btn')?.addEventListener('click', () => {
+    chrome.storage.sync.remove('bmUser', () => loadAuthState());
+  });
 
   updateViewToggle();
   updateDensityBtn();
@@ -1676,6 +1715,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (area === 'sync') {
       console.log('[Bookmarks] Storage changed from side panel, auto-refreshing');
       renderBookmarks();
+      if (changes.bmUser) loadAuthState();
     }
   });
 });

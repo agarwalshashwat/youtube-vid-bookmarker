@@ -173,6 +173,64 @@
     transform: scale(0.95);
 }
 
+/* ── Auth buttons ────────────────────────────────────────────────────────── */
+.signin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted, #545f6c);
+    background: var(--bg-sub, #f3f3f5);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 9999px;
+    padding: 6px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.signin-btn:hover {
+    background: var(--accent-light, rgba(20,184,166,0.1));
+    color: var(--accent, #14B8A6);
+    border-color: var(--accent, #14B8A6);
+}
+
+.signout-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bg-sub, #f3f3f5);
+    border: 1px solid var(--border, #e4e4e7);
+    color: var(--text-muted, #545f6c);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.signout-btn:hover {
+    background: rgba(186, 26, 26, 0.12);
+    color: #ba1a1a;
+    border-color: rgba(186, 26, 26, 0.3);
+}
+
+.user-chip {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-hover, #006B5F);
+    background: var(--accent-light, rgba(20,184,166,0.1));
+    border: 1px solid rgba(20, 184, 166, 0.2);
+    border-radius: 9999px;
+    padding: 6px 14px;
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+
 /* ── Upgrade button ──────────────────────────────────────────────────────── */
 .dashboard-upgrade-btn {
     font-size: 12px;
