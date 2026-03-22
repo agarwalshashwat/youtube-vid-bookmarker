@@ -82,8 +82,9 @@
 }
 
 .page-logo-icon {
-    font-size: 22px;
-    color: #006b5f;
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
 }
 
 .page-title {

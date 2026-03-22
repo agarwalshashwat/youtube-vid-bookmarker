@@ -55,7 +55,9 @@ ext-zip:
 
 ext-open:
 	@open -a "Google Chrome" "chrome://extensions" 2>/dev/null || \
-	 xdg-open "chrome://extensions" 2>/dev/null || \
+	 google-chrome "chrome://extensions" 2>/dev/null || \
+	 google-chrome-stable "chrome://extensions" 2>/dev/null || \
+	 chromium-browser "chrome://extensions" 2>/dev/null || \
 	 echo "Open chrome://extensions manually and enable Developer Mode, then load $(EXT_DIR)/"
 
 # ── Clean ─────────────────────────────────────────────────────────────────────

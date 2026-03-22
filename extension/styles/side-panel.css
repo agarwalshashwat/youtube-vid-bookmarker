@@ -74,8 +74,9 @@ body {
 }
 
 .sp-logo-sym {
-  color: var(--accent);
-  font-size: 22px;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 .sp-logo-text {

@@ -58,8 +58,9 @@ body {
 }
 
 .popup-logo-sym {
-  color: var(--accent);
-  font-size: 22px;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 .popup-logo-text {
