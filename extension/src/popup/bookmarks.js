@@ -79,6 +79,12 @@ async function getVideoTitles() {
   );
 }
 
+async function getVideoDurations() {
+  return new Promise(resolve =>
+    chrome.storage.sync.get({ videoDurations: {} }, r => resolve(r.videoDurations || {}))
+  );
+}
+
 async function deleteBookmark(videoId, bookmarkId) {
   return new Promise((resolve, reject) => {
     const key = bmKey(videoId);
@@ -233,9 +239,7 @@ function renderStatsBar() {
 }
 
 // ─── Build timeline dots HTML for a video group ───────────────────────────────
-function buildTimeline(bookmarks) {
-  const maxTs    = Math.max(...bookmarks.map(b => b.timestamp));
-  const trackMax = Math.max(maxTs + 60, 120);
+function buildTimeline(bookmarks, trackMax) {
   return bookmarks.map(b => {
     const pct   = ((b.timestamp / trackMax) * 95).toFixed(2);
     const color = b.color || '#14B8A6';
@@ -285,7 +289,7 @@ async function renderBookmarks() {
     return;
   }
 
-  const videoTitles = await getVideoTitles();
+  const [videoTitles, videoDurations] = await Promise.all([getVideoTitles(), getVideoDurations()]);
   container.innerHTML = '';
   selectedIds.clear();
   updateBulkDeleteBtn();
@@ -330,6 +334,7 @@ async function renderBookmarks() {
     card.className = 'vc-card' + (videoId === featuredVideoId ? ' vc-card--featured' : '');
 
     const maxTs    = Math.max(...bookmarks.map(b => b.timestamp));
+    const trackMax = videoDurations[videoId] || Math.max(maxTs + 60, 120);
     const addedTs  = Math.max(...bookmarks.map(b => b.createdAt ? new Date(b.createdAt).getTime() : b.id));
     const addedStr = new Date(addedTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const COLLAPSE_AFTER = 3;
@@ -350,10 +355,10 @@ async function renderBookmarks() {
             </div>
           </a>
           <div class="vc-scrubber">
-            <div class="vc-track">${buildTimeline(bookmarks)}</div>
+            <div class="vc-track">${buildTimeline(bookmarks, trackMax)}</div>
             <div class="vc-scrubber-times">
               <span class="vc-time-label">00:00</span>
-              <span class="vc-time-label">${formatTimestamp(maxTs)}</span>
+              <span class="vc-time-label">${formatTimestamp(trackMax)}</span>
             </div>
           </div>
           <div class="vc-card-btns">
@@ -415,7 +420,7 @@ async function renderBookmarks() {
           </div>
           ${hasMore ? `
           <div class="vc-expand-row">
-            <button class="vc-expand-btn" data-video-id="${videoId}" data-collapsed="true">
+            <button class="vc-expand-btn" data-video-id="${videoId}" data-collapsed="true" data-collapse-after="${COLLAPSE_AFTER}">
               Expand All Curations
               <span class="material-symbols-outlined vc-expand-arrow">expand_more</span>
             </button>
@@ -737,15 +742,18 @@ function attachEventListeners() {
 
   document.querySelectorAll('.vc-expand-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const card      = btn.closest('.vc-card');
-      const hidden    = card.querySelectorAll('.vc-vt-item--hidden');
-      const collapsed = btn.dataset.collapsed === 'true';
+      const card         = btn.closest('.vc-card');
+      const items        = card.querySelectorAll('.vc-vt-item');
+      const collapsed    = btn.dataset.collapsed === 'true';
+      const collapseAfter = parseInt(btn.dataset.collapseAfter) || 3;
       if (collapsed) {
-        hidden.forEach(el => el.classList.remove('vc-vt-item--hidden'));
+        items.forEach(el => el.classList.remove('vc-vt-item--hidden'));
         btn.dataset.collapsed = 'false';
         btn.innerHTML = 'Collapse <span class="material-symbols-outlined vc-expand-arrow" style="transform:rotate(180deg);display:inline-block">expand_more</span>';
       } else {
-        hidden.forEach(el => el.classList.add('vc-vt-item--hidden'));
+        items.forEach((el, i) => {
+          if (i >= collapseAfter) el.classList.add('vc-vt-item--hidden');
+        });
         btn.dataset.collapsed = 'true';
         btn.innerHTML = 'Expand All Curations <span class="material-symbols-outlined vc-expand-arrow">expand_more</span>';
       }

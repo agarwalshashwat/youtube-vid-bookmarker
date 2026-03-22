@@ -359,10 +359,11 @@ async function silentSaveBookmark() {
 
   try {
     const result = await new Promise(resolve =>
-      chrome.storage.sync.get({ [bmKey(videoId)]: [], videoTitles: {} }, resolve)
+      chrome.storage.sync.get({ [bmKey(videoId)]: [], videoTitles: {}, videoDurations: {} }, resolve)
     );
-    const bookmarks   = result[bmKey(videoId)];
-    const videoTitles = result.videoTitles;
+    const bookmarks      = result[bmKey(videoId)];
+    const videoTitles    = result.videoTitles;
+    const videoDurations = result.videoDurations;
 
     bookmarks.push({
       id: Date.now(),
@@ -377,8 +378,10 @@ async function silentSaveBookmark() {
       lastReviewed:   null,
     });
 
+    if (video.duration && !isNaN(video.duration)) videoDurations[videoId] = video.duration;
+
     await new Promise((resolve, reject) =>
-      chrome.storage.sync.set({ [bmKey(videoId)]: bookmarks }, () => {
+      chrome.storage.sync.set({ [bmKey(videoId)]: bookmarks, videoDurations }, () => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
         else resolve();
       })
@@ -483,8 +486,9 @@ function initializeMessageListener() {
       if (request.action === 'getBookmarkData') {
         const activeVideo = document.querySelector('video') || video;
         const titleEl = document.querySelector('h1.ytd-video-primary-info-renderer');
-        sendResponse({ 
+        sendResponse({
           currentTime: activeVideo ? activeVideo.currentTime : 0,
+          duration:    activeVideo ? (activeVideo.duration || 0) : 0,
           title: titleEl ? titleEl.textContent.trim() : null
         });
         return;
@@ -514,7 +518,7 @@ function initializeMessageListener() {
         const activeVideo = document.querySelector('video') || video;
         if (!activeVideo) throw new Error('Video element not found');
         video = activeVideo; // keep cache fresh
-        sendResponse({ timestamp: activeVideo.currentTime });
+        sendResponse({ timestamp: activeVideo.currentTime, duration: activeVideo.duration || 0 });
         return;
       }
       if (request.action === 'seekTo') {

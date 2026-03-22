@@ -120,11 +120,12 @@ const TAG_COLORS = {
   async function saveContextMenuBookmark(videoId, timestamp, description, tabId) {
     // Get existing bookmarks
     const result = await new Promise(resolve =>
-      chrome.storage.sync.get({ [bmKey(videoId)]: [], videoTitles: {} }, resolve)
+      chrome.storage.sync.get({ [bmKey(videoId)]: [], videoTitles: {}, videoDurations: {} }, resolve)
     );
 
-    const bookmarks = result[bmKey(videoId)];
-    const videoTitles = result.videoTitles;
+    const bookmarks      = result[bmKey(videoId)];
+    const videoTitles    = result.videoTitles;
+    const videoDurations = result.videoDurations;
 
     // Check for duplicates
     if (bookmarks.some(b => Math.floor(b.timestamp) === Math.floor(timestamp))) {
@@ -135,6 +136,13 @@ const TAG_COLORS = {
     // Parse tags from description
     const tags = parseTags(description);
     const color = getTagColor(tags);
+
+    // Try to get video duration from content script
+    let duration = 0;
+    try {
+      const durRes = await chrome.tabs.sendMessage(tabId, { action: 'getBookmarkData' });
+      if (durRes?.duration) duration = durRes.duration;
+    } catch {}
 
     // Create new bookmark
     const newBookmark = {
@@ -152,8 +160,9 @@ const TAG_COLORS = {
 
     // Save to storage
     bookmarks.push(newBookmark);
+    if (duration && !isNaN(duration)) videoDurations[videoId] = duration;
     await new Promise((resolve, reject) => {
-      chrome.storage.sync.set({ [bmKey(videoId)]: bookmarks }, () => {
+      chrome.storage.sync.set({ [bmKey(videoId)]: bookmarks, videoDurations }, () => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
         else resolve();
       });
@@ -194,14 +203,16 @@ const TAG_COLORS = {
             const response = await chrome.tabs.sendMessage(tab.id, { action: 'getBookmarkData' });
             if (!response || response.currentTime === undefined) return;
 
-            const timestamp = response.currentTime;
+            const timestamp  = response.currentTime;
             const videoTitle = response.title || 'Unknown Video';
+            const duration   = response.duration || 0;
 
             // Check for duplicates
             const key = bmKey(videoId);
-            const data = await chrome.storage.sync.get({ [key]: [], videoTitles: {} });
-            const bookmarks = data[key];
-            const videoTitles = data.videoTitles;
+            const data = await chrome.storage.sync.get({ [key]: [], videoTitles: {}, videoDurations: {} });
+            const bookmarks      = data[key];
+            const videoTitles    = data.videoTitles;
+            const videoDurations = data.videoDurations;
 
             if (bookmarks.some(b => Math.floor(b.timestamp) === Math.floor(timestamp))) {
                 chrome.tabs.sendMessage(tab.id, { action: 'showToast', message: 'Bookmark already exists', type: 'error' });
@@ -242,7 +253,8 @@ const TAG_COLORS = {
             };
 
             bookmarks.push(newBookmark);
-            await chrome.storage.sync.set({ [key]: bookmarks });
+            if (duration && !isNaN(duration)) videoDurations[videoId] = duration;
+            await chrome.storage.sync.set({ [key]: bookmarks, videoDurations });
 
             // Notify content script to update markers or show toast
             chrome.tabs.sendMessage(tab.id, { action: 'bookmarkUpdated' });

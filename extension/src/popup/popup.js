@@ -219,6 +219,11 @@ async function saveBookmark(bookmark) {
     });
 
     await saveVideoBookmarks(bookmark.videoId, bookmarks);
+    if (bookmark.duration) {
+      const vd = (await syncGet({ videoDurations: {} })).videoDurations;
+      vd[bookmark.videoId] = bookmark.duration;
+      await syncSet({ videoDurations: vd });
+    }
     debugLog('Bookmarks', 'Saved bookmark', { description, tags });
 
     // Visual feedback on the video player
@@ -1147,7 +1152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (response && response.timestamp != null) {
         const description = document.getElementById('description').value;
-        await saveBookmark({ videoId, timestamp: response.timestamp, description });
+        await saveBookmark({ videoId, timestamp: response.timestamp, description, duration: response.duration || 0 });
         document.getElementById('description').value = '';
       } else {
         throw new Error('Could not get current video timestamp');
