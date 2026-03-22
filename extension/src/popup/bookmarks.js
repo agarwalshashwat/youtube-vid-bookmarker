@@ -1,6 +1,34 @@
 // ─── API config ───────────────────────────────────────────────────────────────
 const API_BASE = 'https://clipmark-chi.vercel.app';
 
+// Returns a fresh access token, auto-refreshing via /api/refresh if expired.
+async function getValidToken() {
+  const { bmUser } = await new Promise(resolve =>
+    chrome.storage.sync.get({ bmUser: null }, resolve)
+  );
+  if (!bmUser?.accessToken) return null;
+  try {
+    const payload = JSON.parse(atob(bmUser.accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.exp * 1000 > Date.now() + 60_000) return bmUser.accessToken;
+  } catch { /* fall through to refresh */ }
+  if (!bmUser.refreshToken) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: bmUser.refreshToken }),
+    });
+    if (!res.ok) return null;
+    const { access_token, refresh_token } = await res.json();
+    await new Promise(resolve =>
+      chrome.storage.sync.set({ bmUser: { ...bmUser, accessToken: access_token, refreshToken: refresh_token } }, resolve)
+    );
+    return access_token;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Tag colours (must match popup.js / content.js) ──────────────────────────
 const TAG_COLORS = {
   important: '#ff6b6b',
@@ -1444,6 +1472,7 @@ function loadAuthState() {
     const signinBtn  = document.getElementById('signin-btn');
     const userChip   = document.getElementById('user-chip');
     const signoutBtn = document.getElementById('signout-btn');
+    const syncBtn    = document.getElementById('sync-btn');
     const upgradeBtn = document.getElementById('dashboard-upgrade-btn');
     if (!signinBtn || !userChip) return;
 
@@ -1453,14 +1482,55 @@ function loadAuthState() {
       userChip.textContent     = bmUser.userEmail?.split('@')[0] || 'Signed in';
       userChip.title           = bmUser.userEmail || '';
       if (signoutBtn) signoutBtn.style.display = '';
+      if (syncBtn)    syncBtn.style.display    = '';
       if (upgradeBtn) upgradeBtn.style.display = bmUser.isPro ? 'none' : '';
     } else {
       signinBtn.style.display  = '';
       userChip.style.display   = 'none';
       if (signoutBtn) signoutBtn.style.display = 'none';
+      if (syncBtn)    syncBtn.style.display    = 'none';
       if (upgradeBtn) upgradeBtn.style.display = '';
     }
   });
+}
+
+async function syncAllWithCloud() {
+  const token = await getValidToken();
+  if (!token) return 0;
+
+  const allData = await new Promise(resolve => chrome.storage.sync.get(null, resolve));
+  const videoIds = Object.keys(allData)
+    .filter(k => k.startsWith('bm_') && Array.isArray(allData[k]))
+    .map(k => k.slice(3));
+
+  if (!videoIds.length) return 0;
+
+  let updatedCount = 0;
+  for (const videoId of videoIds) {
+    try {
+      const res = await fetch(`${API_BASE}/api/bookmarks?videoId=${encodeURIComponent(videoId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) continue;
+      const { bookmarks: cloudBms } = await res.json();
+      if (!cloudBms?.length) continue;
+
+      const localBms = allData[bmKey(videoId)] || [];
+      const localIds = new Set(localBms.map(b => b.id));
+      const newFromCloud = cloudBms.filter(b => !localIds.has(b.id));
+      if (!newFromCloud.length) continue;
+
+      const merged = [...localBms, ...newFromCloud];
+      await new Promise(resolve => chrome.storage.sync.set({ [bmKey(videoId)]: merged }, resolve));
+      await fetch(`${API_BASE}/api/bookmarks`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ videoId, bookmarks: merged }),
+      });
+      updatedCount++;
+    } catch { /* skip this video */ }
+  }
+  return updatedCount;
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -1507,6 +1577,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('signout-btn')?.addEventListener('click', () => {
     chrome.storage.sync.remove('bmUser', () => loadAuthState());
+  });
+
+  document.getElementById('sync-btn')?.addEventListener('click', async () => {
+    const btn  = document.getElementById('sync-btn');
+    const icon = btn?.querySelector('.sync-btn-icon');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    if (icon) icon.classList.add('spin');
+    try {
+      const updated = await syncAllWithCloud();
+      if (updated > 0) {
+        await renderBookmarks();
+        showToast(`Synced ${updated} video${updated === 1 ? '' : 's'} from cloud`, 'success');
+      } else {
+        showToast('Already up to date', 'success');
+      }
+    } catch {
+      showToast('Sync failed — try again', 'error');
+    } finally {
+      btn.disabled = false;
+      if (icon) icon.classList.remove('spin');
+    }
   });
 
   updateViewToggle();

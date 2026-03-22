@@ -216,6 +216,41 @@
     border-color: rgba(186, 26, 26, 0.3);
 }
 
+.sync-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bg-sub, #f3f3f5);
+    border: 1px solid var(--border, #e4e4e7);
+    color: var(--text-muted, #545f6c);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.sync-btn:hover {
+    background: var(--accent-light, rgba(20,184,166,0.1));
+    color: var(--accent, #14B8A6);
+    border-color: rgba(20,184,166,0.3);
+}
+
+.sync-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.spin {
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+}
+
 .user-chip {
     font-size: 12px;
     font-weight: 600;

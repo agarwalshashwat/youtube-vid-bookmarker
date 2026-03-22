@@ -2,6 +2,34 @@
 // Change to 'https://bookmarker.app' after deploying the webapp
 const API_BASE = 'https://clipmark-chi.vercel.app';
 
+// Returns a fresh access token, auto-refreshing via /api/refresh if expired.
+async function getValidToken() {
+  const { bmUser } = await new Promise(resolve =>
+    chrome.storage.sync.get({ bmUser: null }, resolve)
+  );
+  if (!bmUser?.accessToken) return null;
+  try {
+    const payload = JSON.parse(atob(bmUser.accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.exp * 1000 > Date.now() + 60_000) return bmUser.accessToken;
+  } catch { /* fall through to refresh */ }
+  if (!bmUser.refreshToken) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: bmUser.refreshToken }),
+    });
+    if (!res.ok) return null;
+    const { access_token, refresh_token } = await res.json();
+    await new Promise(resolve =>
+      chrome.storage.sync.set({ bmUser: { ...bmUser, accessToken: access_token, refreshToken: refresh_token } }, resolve)
+    );
+    return access_token;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Tag colours ────────────────────────────────────────────────────────────
 const TAG_COLORS = {
   important: '#ff6b6b',
@@ -117,13 +145,13 @@ async function saveVideoBookmarks(videoId, bookmarks) {
 
 async function syncToCloud(videoId, bookmarks) {
   try {
-    const { bmUser } = await syncGet({ bmUser: null });
-    if (!bmUser?.accessToken) return;
+    const token = await getValidToken();
+    if (!token) return;
     await fetch(`${API_BASE}/api/bookmarks`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${bmUser.accessToken}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({ videoId, bookmarks }),
     });
@@ -134,10 +162,10 @@ async function syncToCloud(videoId, bookmarks) {
 
 async function pullFromCloud(videoId) {
   try {
-    const { bmUser } = await syncGet({ bmUser: null });
-    if (!bmUser?.accessToken) return;
+    const token = await getValidToken();
+    if (!token) return;
     const res = await fetch(`${API_BASE}/api/bookmarks?videoId=${encodeURIComponent(videoId)}`, {
-      headers: { 'Authorization': `Bearer ${bmUser.accessToken}` },
+      headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!res.ok) return;
     const { bookmarks: cloudBms } = await res.json();
